@@ -157,101 +157,53 @@ export function useSimulatedData(activeScenario: ScenarioId) {
     });
   }, []);
 
-  // Update balloons periodically
+  // Initialize balloons once (no random updates)
   useEffect(() => {
-    const interval = setInterval(() => {
-      setBalloons(prev => {
-        const newBalloons = generateBalloons();
-        
-        // Smooth movement of existing balloons
-        return newBalloons.map(balloon => {
-          const existing = prev.find(b => b.id === balloon.id);
-          if (existing) {
-            const dx = (Math.random() - 0.5) * 20;
-            const dy = (Math.random() - 0.5) * 20;
-            return {
-              ...balloon,
-              centerX: Math.max(50, Math.min(1230, existing.centerX + dx)),
-              centerY: Math.max(50, Math.min(670, existing.centerY + dy)),
-              boundingBox: {
-                ...balloon.boundingBox,
-                x: Math.max(0, existing.boundingBox.x + dx),
-                y: Math.max(0, existing.boundingBox.y + dy),
-              },
-            };
-          }
-          return balloon;
-        });
-      });
-    }, 100);
-
-    return () => clearInterval(interval);
+    setBalloons(generateBalloons());
   }, []);
 
-  // Update PTU state based on target
+  // Initialize PTU state (no random updates)
   useEffect(() => {
-    const interval = setInterval(() => {
-      const target = balloons.find(b => b.isTarget);
-      if (target) {
-        const errorX = target.centerX - 640;
-        const errorY = target.centerY - 360;
-        
-        setPtuState(prev => ({
-          panTarget: (errorX * 0.05),
-          panActual: prev.panActual + (prev.panTarget - prev.panActual) * 0.1,
-          tiltTarget: (errorY * 0.05),
-          tiltActual: prev.tiltActual + (prev.tiltTarget - prev.tiltActual) * 0.1,
-        }));
-      }
-    }, 50);
-
-    return () => clearInterval(interval);
+    const target = balloons.find(b => b.isTarget);
+    if (target) {
+      const errorX = target.centerX - 640;
+      const errorY = target.centerY - 360;
+      
+      setPtuState({
+        panTarget: errorX * 0.05,
+        panActual: errorX * 0.05,
+        tiltTarget: errorY * 0.05,
+        tiltActual: errorY * 0.05,
+      });
+    }
   }, [balloons]);
 
-  // Update Kalman state
+  // Initialize Kalman state (no random updates)
   useEffect(() => {
-    const interval = setInterval(() => {
-      setKalmanState(prev => ({
-        ...prev,
-        predicting: Math.random() > 0.8,
-        gatingActive: Math.random() > 0.9,
-        lastUpdate: Date.now(),
-      }));
-    }, 200);
-
-    return () => clearInterval(interval);
+    setKalmanState({
+      enabled: true,
+      predicting: false,
+      gatingActive: false,
+      lastUpdate: Date.now(),
+    });
   }, []);
 
-  // Generate random logs
+  // Initialize logs (no random log generation)
   useEffect(() => {
-    const interval = setInterval(() => {
-      const categories = Object.keys(logMessages) as LogEntry['category'][];
-      const category = categories[Math.floor(Math.random() * categories.length)];
-      const messages = logMessages[category];
-      let message = messages[Math.floor(Math.random() * messages.length)];
-      
-      // Replace placeholders with random values
-      message = message.replace(/\{\}/g, () => (Math.random() * 100).toFixed(1));
-      
-      const levels: LogEntry['level'][] = ['info', 'info', 'info', 'success', 'warning'];
-      const level = levels[Math.floor(Math.random() * levels.length)];
-      
-      addLog(category, level, message);
-    }, 500);
-
-    return () => clearInterval(interval);
+    // Add initial log entries only
+    addLog('system', 'success', 'System initialized');
+    addLog('detection', 'info', 'Detection system ready');
   }, [addLog]);
 
-  // Update system status
+  // Initialize system status (no random updates)
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSystemStatus(prev => ({
-        ...prev,
-        latencyMs: 40 + Math.floor(Math.random() * 30),
-      }));
-    }, 1000);
-
-    return () => clearInterval(interval);
+    setSystemStatus({
+      connected: true,
+      cameraOnline: true,
+      ptuOnline: true,
+      trackingActive: true,
+      latencyMs: 55,
+    });
   }, []);
 
   return {

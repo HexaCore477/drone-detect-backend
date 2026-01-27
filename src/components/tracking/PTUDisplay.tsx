@@ -18,6 +18,7 @@ export function PTUDisplay({ state, className }: PTUDisplayProps) {
       title="PTU STATUS" 
       className={className}
       status={panError > 5 || tiltError > 5 ? 'error' : panError > 2 || tiltError > 2 ? 'warning' : 'stable'}
+      scrollable
     >
       <div className="space-y-3">
         {/* Pan Section */}

@@ -15,6 +15,7 @@ export function KalmanDisplay({ state, className }: KalmanDisplayProps) {
       title="KALMAN FILTER" 
       className={className}
       status={!state.enabled ? 'warning' : isStale ? 'error' : 'stable'}
+      scrollable
     >
       <div className="space-y-3">
         <DataGrid columns={2}>

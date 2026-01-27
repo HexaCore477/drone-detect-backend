@@ -24,7 +24,7 @@ export function CameraView({
   const scaleY = (y: number) => (y / height) * 100;
 
   return (
-    <div className="relative aspect-video bg-black rounded overflow-hidden border border-border">
+    <div className="relative w-full h-full bg-black rounded overflow-hidden border border-border">
       {/* Grid Pattern */}
       {showGrid && (
         <div className="absolute inset-0 grid-pattern opacity-30" />
