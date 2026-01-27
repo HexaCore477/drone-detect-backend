@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { OperationalView } from '@/pages/OperationalView';
+import { WaterfallView } from '@/pages/WaterfallView';
 import { useSimulatedData } from '@/hooks/useSimulatedData';
 import type { ScenarioId } from '@/types/tracking';
+import { cn } from '@/lib/utils';
+import { Monitor, Activity } from 'lucide-react';
+
+type ViewMode = 'operational' | 'waterfall';
 
 const Index = () => {
   const [activeScenario, setActiveScenario] = useState<ScenarioId>('D2_Z1');
+  const [viewMode, setViewMode] = useState<ViewMode>('operational');
   const [currentTime, setCurrentTime] = useState(new Date());
   
   const { 
@@ -32,8 +38,37 @@ const Index = () => {
         systemStatus={systemStatus}
       />
 
-      {/* Time Display Bar */}
-      <div className="flex items-center justify-end px-4 py-2 bg-card/50 border-b border-border flex-shrink-0">
+      {/* View Mode Tabs */}
+      <div className="flex items-center justify-between px-4 py-2 bg-card/50 border-b border-border flex-shrink-0">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('operational')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all',
+              'border border-transparent',
+              viewMode === 'operational'
+                ? 'bg-primary/20 border-primary text-primary glow-green'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            <Monitor className="w-4 h-4" />
+            <span>OPERATIONAL</span>
+          </button>
+          <button
+            onClick={() => setViewMode('waterfall')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all',
+              'border border-transparent',
+              viewMode === 'waterfall'
+                ? 'bg-primary/20 border-primary text-primary glow-green'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            <Activity className="w-4 h-4" />
+            <span>WATERFALL</span>
+          </button>
+        </div>
+
         <div className="flex items-center gap-4">
           <div className="font-mono text-xs text-muted-foreground">
             UTC: {currentTime.toISOString().slice(11, 19)}
@@ -44,16 +79,24 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Main Content - Always show Operational View in full screen */}
+      {/* Main Content */}
       <main className="flex-1 overflow-hidden min-h-0">
-        <OperationalView
-          balloons={balloons}
-          ptuState={ptuState}
-          kalmanState={kalmanState}
-          activeScenario={activeScenario}
-          onScenarioChange={setActiveScenario}
-          systemStatus={systemStatus}
-        />
+        {viewMode === 'operational' ? (
+          <OperationalView
+            balloons={balloons}
+            ptuState={ptuState}
+            kalmanState={kalmanState}
+            activeScenario={activeScenario}
+            onScenarioChange={setActiveScenario}
+            systemStatus={systemStatus}
+          />
+        ) : (
+          <WaterfallView
+            logs={logs}
+            ptuState={ptuState}
+            kalmanState={kalmanState}
+          />
+        )}
       </main>
 
       {/* CRT Scanline Effect */}
