@@ -2,95 +2,77 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Military/Tactical Dark Theme */
+    --background: 220 20% 8%;
+    --foreground: 140 60% 75%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 220 18% 12%;
+    --card-foreground: 140 60% 75%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 220 18% 10%;
+    --popover-foreground: 140 60% 75%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* CRT Green Primary */
+    --primary: 140 70% 45%;
+    --primary-foreground: 220 20% 8%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Tactical Blue Secondary */
+    --secondary: 200 80% 40%;
+    --secondary-foreground: 200 80% 95%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 15% 18%;
+    --muted-foreground: 220 10% 55%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Amber Accent for Warnings */
+    --accent: 45 100% 50%;
+    --accent-foreground: 220 20% 8%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Red for Errors/Hostile */
+    --destructive: 0 85% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 140 30% 25%;
+    --input: 220 15% 20%;
+    --ring: 140 70% 45%;
 
-    --radius: 0.5rem;
+    --radius: 0.25rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Custom Colors */
+    --status-stable: 140 70% 45%;
+    --status-warning: 45 100% 50%;
+    --status-error: 0 85% 55%;
+    --status-info: 200 80% 50%;
+    
+    --data-cyan: 185 100% 50%;
+    --data-green: 140 70% 50%;
+    --data-amber: 45 100% 55%;
+    --data-red: 0 85% 55%;
+    
+    --panel-bg: 220 18% 10%;
+    --panel-border: 140 40% 20%;
+    --panel-header: 220 15% 15%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --glow-green: 0 0 10px hsl(140 70% 45% / 0.5);
+    --glow-cyan: 0 0 10px hsl(185 100% 50% / 0.5);
+    --glow-red: 0 0 10px hsl(0 85% 55% / 0.5);
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 220 20% 6%;
+    --sidebar-foreground: 140 60% 75%;
+    --sidebar-primary: 140 70% 45%;
+    --sidebar-primary-foreground: 220 20% 8%;
+    --sidebar-accent: 220 15% 15%;
+    --sidebar-accent-foreground: 140 60% 75%;
+    --sidebar-border: 140 30% 20%;
+    --sidebar-ring: 140 70% 45%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 220 20% 8%;
+    --foreground: 140 60% 75%;
   }
 }
 
@@ -100,6 +82,115 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  /* Monospace for data displays */
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* CRT Scanline Effect */
+  .crt-overlay {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(140 70% 45% / 0.03) 2px,
+      hsl(140 70% 45% / 0.03) 4px
+    );
+  }
+
+  /* Glowing text effects */
+  .glow-green {
+    text-shadow: 0 0 5px hsl(140 70% 45% / 0.7), 0 0 10px hsl(140 70% 45% / 0.5);
+  }
+
+  .glow-cyan {
+    text-shadow: 0 0 5px hsl(185 100% 50% / 0.7), 0 0 10px hsl(185 100% 50% / 0.5);
+  }
+
+  .glow-red {
+    text-shadow: 0 0 5px hsl(0 85% 55% / 0.7), 0 0 10px hsl(0 85% 55% / 0.5);
+  }
+
+  .glow-amber {
+    text-shadow: 0 0 5px hsl(45 100% 50% / 0.7), 0 0 10px hsl(45 100% 50% / 0.5);
+  }
+
+  /* Panel styles */
+  .panel {
+    @apply bg-[hsl(var(--panel-bg))] border border-[hsl(var(--panel-border))] rounded;
+  }
+
+  .panel-header {
+    @apply bg-[hsl(var(--panel-header))] px-3 py-1.5 border-b border-[hsl(var(--panel-border))] text-xs font-semibold uppercase tracking-wider;
+  }
+
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full animate-pulse;
+  }
+
+  .status-stable {
+    @apply bg-[hsl(var(--status-stable))] shadow-[0_0_8px_hsl(var(--status-stable))];
+  }
+
+  .status-warning {
+    @apply bg-[hsl(var(--status-warning))] shadow-[0_0_8px_hsl(var(--status-warning))];
+  }
+
+  .status-error {
+    @apply bg-[hsl(var(--status-error))] shadow-[0_0_8px_hsl(var(--status-error))];
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(220 18% 10%);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(140 40% 25%);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(140 50% 35%);
+  }
+
+  /* Data value styling */
+  .data-value {
+    @apply font-mono text-[hsl(var(--data-cyan))] tabular-nums;
+  }
+
+  .data-label {
+    @apply text-muted-foreground text-xs uppercase tracking-wide;
+  }
+
+  /* Grid pattern background */
+  .grid-pattern {
+    background-image: 
+      linear-gradient(hsl(140 30% 20% / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(140 30% 20% / 0.3) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* Blinking animation for critical values */
+  @keyframes blink-critical {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+  }
+
+  .blink-critical {
+    animation: blink-critical 1s infinite;
   }
 }
