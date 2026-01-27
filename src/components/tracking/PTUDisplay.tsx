@@ -7,12 +7,6 @@ interface PTUDisplayProps {
 }
 
 export function PTUDisplay({ state, className }: PTUDisplayProps) {
-  const panError = Math.abs(state.panTarget - state.panActual);
-  const tiltError = Math.abs(state.tiltTarget - state.tiltActual);
-  
-  const panStatus = panError > 2 ? 'warning' : panError > 5 ? 'error' : 'stable';
-  const tiltStatus = tiltError > 2 ? 'warning' : tiltError > 5 ? 'error' : 'stable';
-  
   return (
     <DataPanel 
       title="PTU STATUS" 
@@ -21,59 +15,33 @@ export function PTUDisplay({ state, className }: PTUDisplayProps) {
       scrollable
     >
       <div className="space-y-3">
-        {/* Pan Section */}
+        {/* Azimuth (Pan) Section */}
         <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pan Axis</div>
-          <DataRow 
-            label="Target" 
-            value={state.panTarget.toFixed(2)} 
-            unit="°" 
-            warning={panStatus === 'warning'}
-            error={panStatus === 'error'}
-          />
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Azimuth</div>
           <DataRow 
             label="Actual" 
             value={state.panActual.toFixed(2)} 
             unit="°"
-          />
-          <DataRow 
-            label="Error" 
-            value={panError.toFixed(2)} 
-            unit="°"
-            warning={panStatus === 'warning'}
-            error={panStatus === 'error'}
+            highlight
           />
         </div>
 
-        {/* Tilt Section */}
+        {/* Pitch (Tilt) Section */}
         <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Tilt Axis</div>
-          <DataRow 
-            label="Target" 
-            value={state.tiltTarget.toFixed(2)} 
-            unit="°"
-            warning={tiltStatus === 'warning'}
-            error={tiltStatus === 'error'}
-          />
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Pitch</div>
           <DataRow 
             label="Actual" 
             value={state.tiltActual.toFixed(2)} 
             unit="°"
-          />
-          <DataRow 
-            label="Error" 
-            value={tiltError.toFixed(2)} 
-            unit="°"
-            warning={tiltStatus === 'warning'}
-            error={tiltStatus === 'error'}
+            highlight
           />
         </div>
 
         {/* Visual Gauge */}
-        <div className="pt-2 border-t border-border/50">
+        {/* <div className="pt-2 border-t border-border/50">
           <div className="flex items-center gap-4">
             <div className="flex-1">
-              <div className="text-[10px] text-muted-foreground mb-1">PAN</div>
+              <div className="text-[10px] text-muted-foreground mb-1">AZIMUTH</div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-primary transition-all duration-150"
@@ -82,7 +50,7 @@ export function PTUDisplay({ state, className }: PTUDisplayProps) {
               </div>
             </div>
             <div className="flex-1">
-              <div className="text-[10px] text-muted-foreground mb-1">TILT</div>
+              <div className="text-[10px] text-muted-foreground mb-1">PITCH</div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-primary transition-all duration-150"
@@ -91,7 +59,7 @@ export function PTUDisplay({ state, className }: PTUDisplayProps) {
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </DataPanel>
   );
