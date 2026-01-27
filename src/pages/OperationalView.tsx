@@ -36,16 +36,13 @@ export function OperationalView({
     <div className="h-full flex min-h-0">
       {/* Left Panel */}
       <div className="w-72 flex flex-col gap-3 p-3 border-r border-border bg-card/50 min-h-0">
-        <div className="flex-shrink-0">
-          <ScenarioSelector 
-            activeScenario={activeScenario} 
-            onSelect={onScenarioChange} 
-          />
-        </div>
-        
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col gap-3 pr-2">
-            <DataPanel title="SCENARIO CONFIG" status="stable">
+            <ScenarioSelector 
+              activeScenario={activeScenario} 
+              onSelect={onScenarioChange} 
+            />
+            <DataPanel title="SCENARIO CONFIG" status="stable" scrollable>
               <div className="space-y-1 text-sm">
                 <DataRow label="Distance" value={scenario.distance} unit="m" />
                 <DataRow label="Zoom" value={`${scenario.zoom}×`} />
@@ -56,7 +53,7 @@ export function OperationalView({
               </div>
             </DataPanel>
 
-            <PTUDisplay state={ptuState} />
+            <KalmanDisplay state={kalmanState} />
           </div>
         </ScrollArea>
       </div>
@@ -136,12 +133,7 @@ export function OperationalView({
       <div className="w-72 flex flex-col gap-3 p-3 border-l border-border bg-card/50 min-h-0">
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col gap-3 pr-2">
-            <TargetInfo 
-              balloons={balloons} 
-              activeTarget={activeTarget}
-            />
-            
-            <KalmanDisplay state={kalmanState} />
+            <PTUControl ptuState={ptuState} />
             
             <DataPanel title="EMITTER STATUS" status="stable">
               <div className="space-y-1 text-sm">

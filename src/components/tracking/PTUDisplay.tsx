@@ -11,7 +11,7 @@ export function PTUDisplay({ state, className }: PTUDisplayProps) {
     <DataPanel 
       title="PTU STATUS" 
       className={className}
-      status={panError > 5 || tiltError > 5 ? 'error' : panError > 2 || tiltError > 2 ? 'warning' : 'stable'}
+      status="stable"
       scrollable
     >
       <div className="space-y-3">
