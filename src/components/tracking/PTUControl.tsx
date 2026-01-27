@@ -180,10 +180,10 @@ export function PTUControl({ className }: PTUControlProps) {
 
           {/* Control Buttons */}
           <div className="space-y-2">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+            {/* <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
               Manual Control {!isAutoTracking && '(Active)'}
             </div>
-            
+             */}
             {/* Up Button */}
             <div className="flex justify-center">
               <Button
@@ -260,7 +260,7 @@ export function PTUControl({ className }: PTUControlProps) {
           </div>
 
           {/* Control Info */}
-          <div className="p-2 bg-muted/10 rounded border border-border/30">
+          {/* <div className="p-2 bg-muted/10 rounded border border-border/30">
             <div className="text-[9px] text-muted-foreground font-mono space-y-0.5">
               <div>Mode: {isAutoTracking ? 'AUTO' : 'MANUAL'}</div>
               <div>Port: {serialPort} @ {baudRate} baud</div>
@@ -268,7 +268,7 @@ export function PTUControl({ className }: PTUControlProps) {
                 <div className="text-tactical-amber">Connect to enable control</div>
               )}
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </DataPanel>
