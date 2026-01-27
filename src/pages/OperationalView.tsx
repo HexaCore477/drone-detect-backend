@@ -57,9 +57,9 @@ export function OperationalView({
       </div>
 
       {/* Center: Camera View */}
-      <div className="flex-1 flex flex-col p-3 gap-3">
+      <div className="flex-1 flex flex-col p-3 gap-3 min-h-0">
         {/* Camera View */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-h-0">
           <CameraView 
             balloons={balloons}
             centerX={640}
@@ -103,8 +103,8 @@ export function OperationalView({
           </div>
         </div>
 
-        {/* Bottom Stats Bar */}
-        <div className="flex gap-3">
+        {/* Bottom Stats Bar - Always visible */}
+        <div className="flex gap-3 flex-shrink-0">
           <DataPanel title="TRACKING METRICS" className="flex-1">
             <DataGrid columns={4}>
               <DataCell label="Frame Rate" value="30" unit="fps" variant="success" />
