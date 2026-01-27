@@ -19,15 +19,21 @@ import {
   Pause,
   Plug,
   PlugZap,
-  Settings
+  Settings,
+  ArrowUpLeft,
+  ArrowUpRight,
+  ArrowDownLeft,
+  ArrowDownRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { PTUState } from '@/types/tracking';
 
 interface PTUControlProps {
+  ptuState?: PTUState;
   className?: string;
 }
 
-export function PTUControl({ className }: PTUControlProps) {
+export function PTUControl({ ptuState, className }: PTUControlProps) {
   const [serialPort, setSerialPort] = useState<string>('COM3');
   const [baudRate, setBaudRate] = useState<string>('9600');
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -42,7 +48,7 @@ export function PTUControl({ className }: PTUControlProps) {
     // Here you would implement actual serial port connection logic
   };
 
-  const handleControl = (direction: 'left' | 'right' | 'up' | 'down' | 'pause') => {
+  const handleControl = (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
     if (!isConnected) return;
     // Here you would implement PTU control commands
     console.log(`PTU Control: ${direction}`);
@@ -180,12 +186,25 @@ export function PTUControl({ className }: PTUControlProps) {
 
           {/* Control Buttons */}
           <div className="space-y-2">
-            {/* <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
               Manual Control {!isAutoTracking && '(Active)'}
             </div>
-             */}
-            {/* Up Button */}
-            <div className="flex justify-center">
+            
+            {/* Top Row: Left-Up, Up, Right-Up */}
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                onClick={() => handleControl('left-up')}
+                disabled={!isConnected || isAutoTracking}
+                variant="outline"
+                size="icon"
+                className={cn(
+                  'h-9 w-9 border-primary/50',
+                  !isConnected || isAutoTracking ? 'opacity-50' : 'hover:bg-primary/20 hover:border-primary'
+                )}
+              >
+                <ArrowUpLeft className="w-4 h-4" />
+              </Button>
+              
               <Button
                 onClick={() => handleControl('up')}
                 disabled={!isConnected || isAutoTracking}
@@ -198,9 +217,22 @@ export function PTUControl({ className }: PTUControlProps) {
               >
                 <ChevronUp className="w-5 h-5" />
               </Button>
+              
+              <Button
+                onClick={() => handleControl('right-up')}
+                disabled={!isConnected || isAutoTracking}
+                variant="outline"
+                size="icon"
+                className={cn(
+                  'h-9 w-9 border-primary/50',
+                  !isConnected || isAutoTracking ? 'opacity-50' : 'hover:bg-primary/20 hover:border-primary'
+                )}
+              >
+                <ArrowUpRight className="w-4 h-4" />
+              </Button>
             </div>
 
-            {/* Left, Pause, Right Row */}
+            {/* Middle Row: Left, Pause, Right */}
             <div className="flex items-center justify-center gap-2">
               <Button
                 onClick={() => handleControl('left')}
@@ -242,8 +274,21 @@ export function PTUControl({ className }: PTUControlProps) {
               </Button>
             </div>
 
-            {/* Down Button */}
-            <div className="flex justify-center">
+            {/* Bottom Row: Left-Down, Down, Right-Down */}
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                onClick={() => handleControl('left-down')}
+                disabled={!isConnected || isAutoTracking}
+                variant="outline"
+                size="icon"
+                className={cn(
+                  'h-9 w-9 border-primary/50',
+                  !isConnected || isAutoTracking ? 'opacity-50' : 'hover:bg-primary/20 hover:border-primary'
+                )}
+              >
+                <ArrowDownLeft className="w-4 h-4" />
+              </Button>
+              
               <Button
                 onClick={() => handleControl('down')}
                 disabled={!isConnected || isAutoTracking}
@@ -256,19 +301,41 @@ export function PTUControl({ className }: PTUControlProps) {
               >
                 <ChevronDown className="w-5 h-5" />
               </Button>
+              
+              <Button
+                onClick={() => handleControl('right-down')}
+                disabled={!isConnected || isAutoTracking}
+                variant="outline"
+                size="icon"
+                className={cn(
+                  'h-9 w-9 border-primary/50',
+                  !isConnected || isAutoTracking ? 'opacity-50' : 'hover:bg-primary/20 hover:border-primary'
+                )}
+              >
+                <ArrowDownRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
 
-          {/* Control Info */}
-          {/* <div className="p-2 bg-muted/10 rounded border border-border/30">
-            <div className="text-[9px] text-muted-foreground font-mono space-y-0.5">
-              <div>Mode: {isAutoTracking ? 'AUTO' : 'MANUAL'}</div>
-              <div>Port: {serialPort} @ {baudRate} baud</div>
-              {!isConnected && (
-                <div className="text-tactical-amber">Connect to enable control</div>
-              )}
+          {/* Azimuth & Pitch Values */}
+          {ptuState && (
+            <div className="pt-2 border-t border-border/50">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-muted/20 p-2 rounded border border-border/50">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Azimuth</div>
+                  <div className="font-mono text-lg font-bold text-tactical-cyan">
+                    {ptuState.panActual.toFixed(2)}°
+                  </div>
+                </div>
+                <div className="bg-muted/20 p-2 rounded border border-border/50">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pitch</div>
+                  <div className="font-mono text-lg font-bold text-tactical-cyan">
+                    {ptuState.tiltActual.toFixed(2)}°
+                  </div>
+                </div>
+              </div>
             </div>
-          </div> */}
+          )}
         </div>
       </div>
     </DataPanel>
