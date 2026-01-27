@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
-import { WaterfallView } from '@/pages/WaterfallView';
 import { OperationalView } from '@/pages/OperationalView';
+import { WaterfallView } from '@/pages/WaterfallView';
 import { useSimulatedData } from '@/hooks/useSimulatedData';
 import type { ScenarioId } from '@/types/tracking';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
+    <div className="h-screen w-screen flex flex-col bg-background overflow-hidden fixed inset-0">
       {/* Header */}
       <Header 
         activeScenario={activeScenario}
@@ -39,7 +39,7 @@ const Index = () => {
       />
 
       {/* View Mode Tabs */}
-      <div className="flex items-center justify-between px-4 py-2 bg-card/50 border-b border-border">
+      <div className="flex items-center justify-between px-4 py-2 bg-card/50 border-b border-border flex-shrink-0">
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('operational')}
@@ -80,7 +80,7 @@ const Index = () => {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden min-h-0">
         {viewMode === 'operational' ? (
           <OperationalView
             balloons={balloons}

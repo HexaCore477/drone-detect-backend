@@ -1,17 +1,20 @@
 import { cn } from '@/lib/utils';
 import { ReactNode } from 'react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface DataPanelProps {
   title: string;
   children: ReactNode;
   className?: string;
   status?: 'stable' | 'warning' | 'error';
+  scrollable?: boolean;
+  maxHeight?: string;
 }
 
-export function DataPanel({ title, children, className, status }: DataPanelProps) {
+export function DataPanel({ title, children, className, status, scrollable = false, maxHeight }: DataPanelProps) {
   return (
-    <div className={cn('panel overflow-hidden', className)}>
-      <div className="panel-header flex items-center justify-between">
+    <div className={cn('panel overflow-hidden flex flex-col', className)}>
+      <div className="panel-header flex items-center justify-between flex-shrink-0">
         <span className="text-primary glow-green">{title}</span>
         {status && (
           <div className={cn('status-dot', {
@@ -21,9 +24,17 @@ export function DataPanel({ title, children, className, status }: DataPanelProps
           })} />
         )}
       </div>
-      <div className="p-3">
-        {children}
-      </div>
+      {scrollable ? (
+        <ScrollArea className="flex-1 min-h-0" style={maxHeight ? { maxHeight } : undefined}>
+          <div className="p-3">
+            {children}
+          </div>
+        </ScrollArea>
+      ) : (
+        <div className="p-3">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { KalmanDisplay } from '@/components/tracking/KalmanDisplay';
 import { TargetInfo } from '@/components/tracking/TargetInfo';
 import { ScenarioSelector } from '@/components/tracking/ScenarioSelector';
 import { DataPanel, DataRow, DataGrid, DataCell } from '@/components/ui/DataPanel';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { 
   DetectedBalloon, 
   PTUState, 
@@ -34,46 +35,54 @@ export function OperationalView({
   const activeTarget = balloons.find(b => b.isTarget) || null;
   
   return (
-    <div className="h-full flex">
+    <div className="h-full flex min-h-0">
       {/* Left Panel */}
-      <div className="w-72 flex flex-col gap-3 p-3 border-r border-border bg-card/50">
-        <ScenarioSelector 
-          activeScenario={activeScenario} 
-          onSelect={onScenarioChange} 
-        />
+      <div className="w-72 flex flex-col gap-3 p-3 border-r border-border bg-card/50 min-h-0">
+        <div className="flex-shrink-0">
+          <ScenarioSelector 
+            activeScenario={activeScenario} 
+            onSelect={onScenarioChange} 
+          />
+        </div>
         
-        <DataPanel title="SCENARIO CONFIG" status="stable">
-          <div className="space-y-1 text-sm">
-            <DataRow label="Distance" value={scenario.distance} unit="m" />
-            <DataRow label="Zoom" value={`${scenario.zoom}×`} />
-            <DataRow label="Deadband" value="5" unit="px" />
-            <DataRow label="Max Rate" value="10.0" unit="°/s" />
-            <DataRow label="Max Step" value="2.0" unit="°" />
-            <DataRow label="Latency" value="200" unit="ms" />
-          </div>
-        </DataPanel>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="flex flex-col gap-3 pr-2">
+            <DataPanel title="SCENARIO CONFIG" status="stable">
+              <div className="space-y-1 text-sm">
+                <DataRow label="Distance" value={scenario.distance} unit="m" />
+                <DataRow label="Zoom" value={`${scenario.zoom}×`} />
+                <DataRow label="Deadband" value="5" unit="px" />
+                <DataRow label="Max Rate" value="10.0" unit="°/s" />
+                <DataRow label="Max Step" value="2.0" unit="°" />
+                <DataRow label="Latency" value="200" unit="ms" />
+              </div>
+            </DataPanel>
 
-        <PTUDisplay state={ptuState} />
+            <PTUDisplay state={ptuState} />
+          </div>
+        </ScrollArea>
       </div>
 
       {/* Center: Camera View */}
       <div className="flex-1 flex flex-col p-3 gap-3 min-h-0">
-        {/* Camera View */}
-        <div className="flex-1 relative min-h-0">
-          <CameraView 
-            balloons={balloons}
-            centerX={640}
-            centerY={360}
-            showGrid={true}
-            showCrosshair={true}
-          />
+        {/* Camera View - Takes remaining space */}
+        <div className="flex-1 relative min-h-0 flex items-center justify-center overflow-hidden">
+          <div className="w-full h-full" style={{ maxWidth: '100%', maxHeight: '100%', aspectRatio: '16/9' }}>
+            <CameraView 
+              balloons={balloons}
+              centerX={640}
+              centerY={360}
+              showGrid={true}
+              showCrosshair={true}
+            />
+          </div>
           
           {/* Overlay Info */}
-          <div className="absolute top-3 left-3 flex flex-col gap-2">
+          <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
             <div className="bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded border border-border/50">
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${
-                  systemStatus.trackingActive ? 'bg-tactical-green animate-pulse shadow-[0_0_8px_hsl(var(--status-stable))]' : 'bg-tactical-red'
+                  systemStatus.trackingActive ? 'bg-tactical-green shadow-[0_0_8px_hsl(var(--status-stable))]' : 'bg-tactical-red'
                 }`} />
                 <span className="font-mono text-xs text-primary uppercase">
                   {systemStatus.trackingActive ? 'Tracking Active' : 'Tracking Idle'}
@@ -90,7 +99,7 @@ export function OperationalView({
           </div>
 
           {/* Bottom Left Overlay */}
-          <div className="absolute bottom-3 left-3">
+          <div className="absolute bottom-3 left-3 z-10">
             <div className="bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded border border-border/50">
               <div className="font-mono text-[10px] text-muted-foreground">
                 SCENE: <span className="text-primary">{activeScenario}</span>
@@ -103,8 +112,8 @@ export function OperationalView({
           </div>
         </div>
 
-        {/* Bottom Stats Bar - Always visible */}
-        <div className="flex gap-3 flex-shrink-0">
+        {/* Bottom Stats Bar - Fixed height */}
+        <div className="flex gap-3 flex-shrink-0 h-auto">
           <DataPanel title="TRACKING METRICS" className="flex-1">
             <DataGrid columns={4}>
               <DataCell label="Frame Rate" value="30" unit="fps" variant="success" />
@@ -126,22 +135,26 @@ export function OperationalView({
       </div>
 
       {/* Right Panel */}
-      <div className="w-72 flex flex-col gap-3 p-3 border-l border-border bg-card/50">
-        <TargetInfo 
-          balloons={balloons} 
-          activeTarget={activeTarget}
-        />
-        
-        <KalmanDisplay state={kalmanState} />
-        
-        <DataPanel title="EMITTER STATUS" status="stable">
-          <div className="space-y-1 text-sm">
-            <DataRow label="Pan Offset" value="0.00" unit="°" />
-            <DataRow label="Tilt Offset" value="0.00" unit="°" />
-            <DataRow label="Focus" value="AUTO" />
-            <DataRow label="Power" value="100" unit="%" />
+      <div className="w-72 flex flex-col gap-3 p-3 border-l border-border bg-card/50 min-h-0">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="flex flex-col gap-3 pr-2">
+            <TargetInfo 
+              balloons={balloons} 
+              activeTarget={activeTarget}
+            />
+            
+            <KalmanDisplay state={kalmanState} />
+            
+            <DataPanel title="EMITTER STATUS" status="stable">
+              <div className="space-y-1 text-sm">
+                <DataRow label="Pan Offset" value="0.00" unit="°" />
+                <DataRow label="Tilt Offset" value="0.00" unit="°" />
+                <DataRow label="Focus" value="AUTO" />
+                <DataRow label="Power" value="100" unit="%" />
+              </div>
+            </DataPanel>
           </div>
-        </DataPanel>
+        </ScrollArea>
       </div>
     </div>
   );

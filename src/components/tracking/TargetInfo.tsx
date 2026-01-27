@@ -29,6 +29,7 @@ export function TargetInfo({ balloons, activeTarget, className }: TargetInfoProp
       title="TARGET ACQUISITION" 
       className={className}
       status={activeTarget ? 'stable' : redBalloons.length > 0 ? 'warning' : 'error'}
+      scrollable
     >
       <div className="space-y-3">
         {/* Detection Summary */}
