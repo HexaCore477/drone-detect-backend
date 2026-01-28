@@ -6,10 +6,12 @@ import { useSimulatedData } from '@/hooks/useSimulatedData';
 import type { ScenarioId } from '@/types/tracking';
 import { cn } from '@/lib/utils';
 import { Monitor, Activity } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 type ViewMode = 'operational' | 'waterfall';
 
 const Index = () => {
+  const { t } = useTranslation();
   const [activeScenario, setActiveScenario] = useState<ScenarioId>('D2_Z1');
   const [viewMode, setViewMode] = useState<ViewMode>('operational');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -52,7 +54,7 @@ const Index = () => {
             )}
           >
             <Monitor className="w-4 h-4" />
-            <span>OPERATIONAL</span>
+            <span>{t('tabs.operational')}</span>
           </button>
           <button
             onClick={() => setViewMode('waterfall')}
@@ -65,16 +67,16 @@ const Index = () => {
             )}
           >
             <Activity className="w-4 h-4" />
-            <span>WATERFALL</span>
+            <span>{t('tabs.waterfall')}</span>
           </button>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="font-mono text-xs text-muted-foreground">
-            UTC: {currentTime.toISOString().slice(11, 19)}
+            {t('time.utc')}: {currentTime.toISOString().slice(11, 19)}
           </div>
           <div className="font-mono text-xs text-muted-foreground">
-            LOCAL: {currentTime.toLocaleTimeString('en-US', { hour12: false })}
+            {t('time.local')}: {currentTime.toLocaleTimeString('en-US', { hour12: false })}
           </div>
         </div>
       </div>

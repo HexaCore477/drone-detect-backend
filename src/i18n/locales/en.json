@@ -1,0 +1,92 @@
+{
+  "header": {
+    "title": "BALLOON TRACKING SYSTEM",
+    "subtitle": "PTU Control Interface v1.0",
+    "latency": "Latency"
+  },
+  "tabs": {
+    "operational": "OPERATIONAL",
+    "waterfall": "WATERFALL"
+  },
+  "time": {
+    "utc": "UTC",
+    "local": "LOCAL"
+  },
+  "status": {
+    "sys": "SYS",
+    "cam": "CAM",
+    "ptu": "PTU",
+    "online": "ONLINE",
+    "offline": "OFFLINE"
+  },
+  "scenario": {
+    "title": "ACTIVE SCENARIO",
+    "scene": "SCENE",
+    "distance": "DIST",
+    "zoom": "ZOOM"
+  },
+  "camera": {
+    "title": "CAMERA FEED",
+    "resolution": "1280×720",
+    "fps": "FPS",
+    "locked": "LOCKED",
+    "searching": "SEARCHING",
+    "noTarget": "NO TARGET"
+  },
+  "ptu": {
+    "title": "PTU STATUS",
+    "azimuth": "Azimuth",
+    "pitch": "Pitch",
+    "actual": "Actual"
+  },
+  "kalman": {
+    "title": "KALMAN FILTER",
+    "status": "Status",
+    "mode": "Mode",
+    "enabled": "ENABLED",
+    "disabled": "DISABLED",
+    "predict": "PREDICT",
+    "update": "UPDATE",
+    "gating": "Gating",
+    "active": "ACTIVE",
+    "inactive": "INACTIVE",
+    "lastUpdate": "Last Update",
+    "stateVector": "State Vector"
+  },
+  "target": {
+    "title": "TARGET ACQUISITION",
+    "totalDetected": "Total Detected",
+    "redHostile": "Red (Hostile)",
+    "activeTarget": "Active Target",
+    "priorityQueue": "Target Priority Queue",
+    "noHostile": "No hostile targets",
+    "large": "LRG",
+    "medium": "MED",
+    "small": "SML"
+  },
+  "tracking": {
+    "metricsTitle": "TRACKING METRICS",
+    "limitsTitle": "CONTROL LIMITS",
+    "centerError": "Center Error",
+    "trackQuality": "Track Quality",
+    "updateRate": "Update Rate",
+    "maxVelocity": "Max Velocity",
+    "deadband": "Deadband",
+    "latencyComp": "Latency Comp"
+  },
+  "logs": {
+    "title": "SYSTEM LOGS",
+    "all": "All",
+    "detection": "Detection",
+    "tracking": "Tracking",
+    "ptuLog": "PTU",
+    "kalmanLog": "Kalman",
+    "noLogs": "No logs available"
+  },
+  "waterfall": {
+    "systemTransparency": "System Transparency View",
+    "systemLogs": "SYSTEM LOGS",
+    "ptuState": "PTU STATE",
+    "kalmanState": "KALMAN STATE"
+  }
+}
