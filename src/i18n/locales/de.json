@@ -17,27 +17,50 @@
     "cam": "KAM",
     "ptu": "PTU",
     "online": "ONLINE",
-    "offline": "OFFLINE"
+    "offline": "OFFLINE",
+    "connected": "VERBUNDEN",
+    "disconnected": "GETRENNT"
   },
   "scenario": {
     "title": "AKTIVES SZENARIO",
     "scene": "SZENE",
     "distance": "DIST",
-    "zoom": "ZOOM"
+    "zoom": "ZOOM",
+    "config": "SZENARIO-KONFIGURATION",
+    "deadband": "Totzone",
+    "maxRate": "Max. Rate",
+    "maxStep": "Max. Schritt",
+    "latency": "Latenz"
   },
   "camera": {
     "title": "KAMERABILD",
-    "resolution": "1280×720",
-    "fps": "FPS",
-    "locked": "ERFASST",
-    "searching": "SUCHE",
-    "noTarget": "KEIN ZIEL"
+    "feed": "KAMERABILD",
+    "trackingActive": "Verfolgung Aktiv",
+    "trackingIdle": "Verfolgung Inaktiv",
+    "mode": "MODUS",
+    "auto": "AUTO",
+    "manual": "MANUELL",
+    "kf": "KF",
+    "on": "AN",
+    "off": "AUS"
   },
   "ptu": {
     "title": "PTU-STATUS",
+    "control": "PTU-STEUERUNG",
     "azimuth": "Azimut",
     "pitch": "Neigung",
-    "actual": "Aktuell"
+    "actual": "Aktuell",
+    "target": "ZIEL",
+    "error": "FEHLER",
+    "serialPort": "Serieller Port",
+    "baudRate": "Baudrate",
+    "serialConnection": "Serielle Verbindung",
+    "connect": "Verbinden",
+    "disconnect": "Trennen",
+    "controlSection": "Steuerung",
+    "autoTracking": "Automatische Objektverfolgung",
+    "manualControl": "Manuelle Steuerung",
+    "active": "(Aktiv)"
   },
   "kalman": {
     "title": "KALMAN-FILTER",
@@ -51,7 +74,15 @@
     "active": "AKTIV",
     "inactive": "INAKTIV",
     "lastUpdate": "Letzte Aktualisierung",
-    "stateVector": "Zustandsvektor"
+    "stateVector": "Zustandsvektor",
+    "filterMode": "FILTERMODUS",
+    "predicting": "VORHERSAGE",
+    "updating": "AKTUALISIERUNG",
+    "rejecting": "ABLEHNUNG",
+    "passing": "DURCHLASS",
+    "stateCovariance": "ZUSTANDSKOVARIANZ",
+    "leadTime": "Vorlaufzeit (T)",
+    "leadVector": "VORLAUFVEKTOR"
   },
   "target": {
     "title": "ZIELERFASSUNG",
@@ -62,7 +93,8 @@
     "noHostile": "Keine feindlichen Ziele",
     "large": "GRO",
     "medium": "MIT",
-    "small": "KLN"
+    "small": "KLN",
+    "tgt": "ZIL"
   },
   "tracking": {
     "metricsTitle": "VERFOLGUNGSMETRIKEN",
@@ -70,9 +102,11 @@
     "centerError": "Zentrierfehler",
     "trackQuality": "Verfolgungsqualität",
     "updateRate": "Aktualisierungsrate",
+    "procTime": "Verarbeitungszeit",
     "maxVelocity": "Max. Geschw.",
     "deadband": "Totzone",
-    "latencyComp": "Latenzkompensation"
+    "latencyComp": "Latenzkompensation",
+    "accel": "Beschl."
   },
   "logs": {
     "title": "SYSTEMPROTOKOLLE",
@@ -87,6 +121,22 @@
     "systemTransparency": "Systemtransparenz-Ansicht",
     "systemLogs": "SYSTEMPROTOKOLLE",
     "ptuState": "PTU-ZUSTAND",
-    "kalmanState": "KALMAN-ZUSTAND"
+    "kalmanState": "KALMAN-ZUSTAND",
+    "detectionEvents": "ERKENNUNGSEREIGNISSE",
+    "trackingStatus": "VERFOLGUNGSSTATUS",
+    "kalmanFilterLog": "KALMAN-FILTER-PROTOKOLL",
+    "predictionState": "VORHERSAGEZUSTAND",
+    "latencyCompensation": "LATENZKOMPENSATION",
+    "ptuCommands": "PTU-BEFEHLE",
+    "systemLog": "SYSTEMPROTOKOLL",
+    "panAxis": "PAN-ACHSE",
+    "tiltAxis": "TILT-ACHSE"
+  },
+  "emitter": {
+    "title": "EMITTER-STATUS",
+    "panOffset": "Pan-Offset",
+    "tiltOffset": "Tilt-Offset",
+    "focus": "Fokus",
+    "power": "Leistung"
   }
 }

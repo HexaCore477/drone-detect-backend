@@ -44,14 +44,14 @@ export function OperationalView({
               activeScenario={activeScenario} 
               onSelect={onScenarioChange} 
             />
-            <DataPanel title="SCENARIO CONFIG" status="stable" scrollable>
+            <DataPanel title={t('scenario.config')} status="stable" scrollable>
               <div className="space-y-1 text-sm">
-                <DataRow label="Distance" value={scenario.distance} unit="m" />
-                <DataRow label="Zoom" value={`${scenario.zoom}×`} />
-                <DataRow label="Deadband" value="5" unit="px" />
-                <DataRow label="Max Rate" value="10.0" unit="°/s" />
-                <DataRow label="Max Step" value="2.0" unit="°" />
-                <DataRow label="Latency" value="200" unit="ms" />
+                <DataRow label={t('scenario.distance')} value={scenario.distance} unit="m" />
+                <DataRow label={t('scenario.zoom')} value={`${scenario.zoom}×`} />
+                <DataRow label={t('scenario.deadband')} value="5" unit="px" />
+                <DataRow label={t('scenario.maxRate')} value="10.0" unit="°/s" />
+                <DataRow label={t('scenario.maxStep')} value="2.0" unit="°" />
+                <DataRow label={t('scenario.latency')} value="200" unit="ms" />
               </div>
             </DataPanel>
 
@@ -82,15 +82,15 @@ export function OperationalView({
                   systemStatus.trackingActive ? 'bg-tactical-green shadow-[0_0_8px_hsl(var(--status-stable))]' : 'bg-tactical-red'
                 }`} />
                 <span className="font-mono text-xs text-primary uppercase">
-                  {systemStatus.trackingActive ? 'Tracking Active' : 'Tracking Idle'}
+                  {systemStatus.trackingActive ? t('camera.trackingActive') : t('camera.trackingIdle')}
                 </span>
               </div>
             </div>
             
             <div className="bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded border border-border/50">
               <div className="font-mono text-xs">
-                <span className="text-muted-foreground">MODE: </span>
-                <span className="text-tactical-cyan">AUTO</span>
+                <span className="text-muted-foreground">{t('camera.mode')}: </span>
+                <span className="text-tactical-cyan">{t('camera.auto')}</span>
               </div>
             </div>
           </div>
@@ -99,10 +99,10 @@ export function OperationalView({
           <div className="absolute bottom-3 left-3 z-10">
             <div className="bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded border border-border/50">
               <div className="font-mono text-[10px] text-muted-foreground">
-                SCENE: <span className="text-primary">{activeScenario}</span>
+                {t('scenario.scene')}: <span className="text-primary">{activeScenario}</span>
                 <span className="mx-2">|</span>
-                KF: <span className={kalmanState.enabled ? 'text-tactical-green' : 'text-tactical-amber'}>
-                  {kalmanState.enabled ? 'ON' : 'OFF'}
+                {t('camera.kf')}: <span className={kalmanState.enabled ? 'text-tactical-green' : 'text-tactical-amber'}>
+                  {kalmanState.enabled ? t('camera.on') : t('camera.off')}
                 </span>
               </div>
             </div>
@@ -116,7 +116,7 @@ export function OperationalView({
               <DataCell label={t('tracking.centerError')} value="3.2" unit="px" variant="default" />
               <DataCell label={t('tracking.trackQuality')} value="98.5" unit="%" variant="success" />
               <DataCell label={t('tracking.updateRate')} value="30" unit="fps" variant="success" />
-              <DataCell label="Proc Time" value="12.5" unit="ms" variant="default" />
+              <DataCell label={t('tracking.procTime')} value="12.5" unit="ms" variant="default" />
             </DataGrid>
           </DataPanel>
           
@@ -125,7 +125,7 @@ export function OperationalView({
               <DataCell label={t('tracking.maxVelocity')} value="10.0" unit="°/s" />
               <DataCell label={t('tracking.deadband')} value="5" unit="px" />
               <DataCell label={t('tracking.latencyComp')} value="200" unit="ms" />
-              <DataCell label="Accel" value="5.0" unit="°/s²" />
+              <DataCell label={t('tracking.accel')} value="5.0" unit="°/s²" />
             </DataGrid>
           </DataPanel>
         </div>
@@ -137,12 +137,12 @@ export function OperationalView({
           <div className="flex flex-col gap-3 pr-2">
             <PTUControl ptuState={ptuState} />
             
-            <DataPanel title="EMITTER STATUS" status="stable">
+            <DataPanel title={t('emitter.title')} status="stable">
               <div className="space-y-1 text-sm">
-                <DataRow label="Pan Offset" value="0.00" unit="°" />
-                <DataRow label="Tilt Offset" value="0.00" unit="°" />
-                <DataRow label="Focus" value="AUTO" />
-                <DataRow label="Power" value="100" unit="%" />
+                <DataRow label={t('emitter.panOffset')} value="0.00" unit="°" />
+                <DataRow label={t('emitter.tiltOffset')} value="0.00" unit="°" />
+                <DataRow label={t('emitter.focus')} value={t('camera.auto')} />
+                <DataRow label={t('emitter.power')} value="100" unit="%" />
               </div>
             </DataPanel>
           </div>
