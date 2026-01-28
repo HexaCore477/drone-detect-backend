@@ -1,0 +1,92 @@
+{
+  "header": {
+    "title": "BALLON-VERFOLGUNGSSYSTEM",
+    "subtitle": "PTU-Steuerungsschnittstelle v1.0",
+    "latency": "Latenz"
+  },
+  "tabs": {
+    "operational": "BETRIEB",
+    "waterfall": "WASSERFALL"
+  },
+  "time": {
+    "utc": "UTC",
+    "local": "LOKAL"
+  },
+  "status": {
+    "sys": "SYS",
+    "cam": "KAM",
+    "ptu": "PTU",
+    "online": "ONLINE",
+    "offline": "OFFLINE"
+  },
+  "scenario": {
+    "title": "AKTIVES SZENARIO",
+    "scene": "SZENE",
+    "distance": "DIST",
+    "zoom": "ZOOM"
+  },
+  "camera": {
+    "title": "KAMERABILD",
+    "resolution": "1280×720",
+    "fps": "FPS",
+    "locked": "ERFASST",
+    "searching": "SUCHE",
+    "noTarget": "KEIN ZIEL"
+  },
+  "ptu": {
+    "title": "PTU-STATUS",
+    "azimuth": "Azimut",
+    "pitch": "Neigung",
+    "actual": "Aktuell"
+  },
+  "kalman": {
+    "title": "KALMAN-FILTER",
+    "status": "Status",
+    "mode": "Modus",
+    "enabled": "AKTIVIERT",
+    "disabled": "DEAKTIVIERT",
+    "predict": "VORHERSAGE",
+    "update": "AKTUALISIERUNG",
+    "gating": "Gating",
+    "active": "AKTIV",
+    "inactive": "INAKTIV",
+    "lastUpdate": "Letzte Aktualisierung",
+    "stateVector": "Zustandsvektor"
+  },
+  "target": {
+    "title": "ZIELERFASSUNG",
+    "totalDetected": "Gesamt erkannt",
+    "redHostile": "Rot (Feindlich)",
+    "activeTarget": "Aktives Ziel",
+    "priorityQueue": "Ziel-Prioritätswarteschlange",
+    "noHostile": "Keine feindlichen Ziele",
+    "large": "GRO",
+    "medium": "MIT",
+    "small": "KLN"
+  },
+  "tracking": {
+    "metricsTitle": "VERFOLGUNGSMETRIKEN",
+    "limitsTitle": "STEUERUNGSGRENZEN",
+    "centerError": "Zentrierfehler",
+    "trackQuality": "Verfolgungsqualität",
+    "updateRate": "Aktualisierungsrate",
+    "maxVelocity": "Max. Geschw.",
+    "deadband": "Totzone",
+    "latencyComp": "Latenzkompensation"
+  },
+  "logs": {
+    "title": "SYSTEMPROTOKOLLE",
+    "all": "Alle",
+    "detection": "Erkennung",
+    "tracking": "Verfolgung",
+    "ptuLog": "PTU",
+    "kalmanLog": "Kalman",
+    "noLogs": "Keine Protokolle verfügbar"
+  },
+  "waterfall": {
+    "systemTransparency": "Systemtransparenz-Ansicht",
+    "systemLogs": "SYSTEMPROTOKOLLE",
+    "ptuState": "PTU-ZUSTAND",
+    "kalmanState": "KALMAN-ZUSTAND"
+  }
+}

@@ -12,6 +12,7 @@ import type {
   SystemStatus 
 } from '@/types/tracking';
 import { SCENARIOS } from '@/data/scenarios';
+import { useTranslation } from 'react-i18next';
 
 interface OperationalViewProps {
   balloons: DetectedBalloon[];
@@ -30,6 +31,7 @@ export function OperationalView({
   onScenarioChange,
   systemStatus,
 }: OperationalViewProps) {
+  const { t } = useTranslation();
   const scenario = SCENARIOS[activeScenario];
   
   return (
@@ -109,20 +111,20 @@ export function OperationalView({
 
         {/* Bottom Stats Bar - Fixed height */}
         <div className="flex gap-3 flex-shrink-0 h-auto">
-          <DataPanel title="TRACKING METRICS" className="flex-1">
+          <DataPanel title={t('tracking.metricsTitle')} className="flex-1">
             <DataGrid columns={4}>
-              <DataCell label="Frame Rate" value="30" unit="fps" variant="success" />
+              <DataCell label={t('tracking.centerError')} value="3.2" unit="px" variant="default" />
+              <DataCell label={t('tracking.trackQuality')} value="98.5" unit="%" variant="success" />
+              <DataCell label={t('tracking.updateRate')} value="30" unit="fps" variant="success" />
               <DataCell label="Proc Time" value="12.5" unit="ms" variant="default" />
-              <DataCell label="Pixel Error" value="3.2" unit="px" variant="default" />
-              <DataCell label="Stability" value="98.5" unit="%" variant="success" />
             </DataGrid>
           </DataPanel>
           
-          <DataPanel title="CONTROL LIMITS" className="flex-1">
+          <DataPanel title={t('tracking.limitsTitle')} className="flex-1">
             <DataGrid columns={4}>
-              <DataCell label="Pan Limit" value="±180" unit="°" />
-              <DataCell label="Tilt Limit" value="±45" unit="°" />
-              <DataCell label="Vel Limit" value="10.0" unit="°/s" />
+              <DataCell label={t('tracking.maxVelocity')} value="10.0" unit="°/s" />
+              <DataCell label={t('tracking.deadband')} value="5" unit="px" />
+              <DataCell label={t('tracking.latencyComp')} value="200" unit="ms" />
               <DataCell label="Accel" value="5.0" unit="°/s²" />
             </DataGrid>
           </DataPanel>
