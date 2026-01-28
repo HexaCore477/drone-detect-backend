@@ -17,27 +17,50 @@
     "cam": "CAM",
     "ptu": "PTU",
     "online": "ONLINE",
-    "offline": "OFFLINE"
+    "offline": "OFFLINE",
+    "connected": "CONNECTED",
+    "disconnected": "DISCONNECTED"
   },
   "scenario": {
     "title": "ACTIVE SCENARIO",
     "scene": "SCENE",
     "distance": "DIST",
-    "zoom": "ZOOM"
+    "zoom": "ZOOM",
+    "config": "SCENARIO CONFIG",
+    "deadband": "Deadband",
+    "maxRate": "Max Rate",
+    "maxStep": "Max Step",
+    "latency": "Latency"
   },
   "camera": {
     "title": "CAMERA FEED",
-    "resolution": "1280×720",
-    "fps": "FPS",
-    "locked": "LOCKED",
-    "searching": "SEARCHING",
-    "noTarget": "NO TARGET"
+    "feed": "CAMERA FEED",
+    "trackingActive": "Tracking Active",
+    "trackingIdle": "Tracking Idle",
+    "mode": "MODE",
+    "auto": "AUTO",
+    "manual": "MANUAL",
+    "kf": "KF",
+    "on": "ON",
+    "off": "OFF"
   },
   "ptu": {
     "title": "PTU STATUS",
+    "control": "PTU CONTROL",
     "azimuth": "Azimuth",
     "pitch": "Pitch",
-    "actual": "Actual"
+    "actual": "Actual",
+    "target": "TARGET",
+    "error": "ERROR",
+    "serialPort": "Serial Port",
+    "baudRate": "Baud Rate",
+    "serialConnection": "Serial Port Connection",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "controlSection": "Control",
+    "autoTracking": "Automatic Object Tracking",
+    "manualControl": "Manual Control",
+    "active": "(Active)"
   },
   "kalman": {
     "title": "KALMAN FILTER",
@@ -51,7 +74,15 @@
     "active": "ACTIVE",
     "inactive": "INACTIVE",
     "lastUpdate": "Last Update",
-    "stateVector": "State Vector"
+    "stateVector": "State Vector",
+    "filterMode": "FILTER MODE",
+    "predicting": "PREDICTING",
+    "updating": "UPDATING",
+    "rejecting": "REJECTING",
+    "passing": "PASSING",
+    "stateCovariance": "STATE COVARIANCE",
+    "leadTime": "Lead Time (T)",
+    "leadVector": "LEAD VECTOR"
   },
   "target": {
     "title": "TARGET ACQUISITION",
@@ -62,7 +93,8 @@
     "noHostile": "No hostile targets",
     "large": "LRG",
     "medium": "MED",
-    "small": "SML"
+    "small": "SML",
+    "tgt": "TGT"
   },
   "tracking": {
     "metricsTitle": "TRACKING METRICS",
@@ -70,9 +102,11 @@
     "centerError": "Center Error",
     "trackQuality": "Track Quality",
     "updateRate": "Update Rate",
+    "procTime": "Proc Time",
     "maxVelocity": "Max Velocity",
     "deadband": "Deadband",
-    "latencyComp": "Latency Comp"
+    "latencyComp": "Latency Comp",
+    "accel": "Accel"
   },
   "logs": {
     "title": "SYSTEM LOGS",
@@ -87,6 +121,22 @@
     "systemTransparency": "System Transparency View",
     "systemLogs": "SYSTEM LOGS",
     "ptuState": "PTU STATE",
-    "kalmanState": "KALMAN STATE"
+    "kalmanState": "KALMAN STATE",
+    "detectionEvents": "DETECTION EVENTS",
+    "trackingStatus": "TRACKING STATUS",
+    "kalmanFilterLog": "KALMAN FILTER LOG",
+    "predictionState": "PREDICTION STATE",
+    "latencyCompensation": "LATENCY COMPENSATION",
+    "ptuCommands": "PTU COMMANDS",
+    "systemLog": "SYSTEM LOG",
+    "panAxis": "PAN AXIS",
+    "tiltAxis": "TILT AXIS"
+  },
+  "emitter": {
+    "title": "EMITTER STATUS",
+    "panOffset": "Pan Offset",
+    "tiltOffset": "Tilt Offset",
+    "focus": "Focus",
+    "power": "Power"
   }
 }

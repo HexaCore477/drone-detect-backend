@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { DetectedBalloon } from '@/types/tracking';
+import { useTranslation } from 'react-i18next';
 
 interface CameraViewProps {
   balloons: DetectedBalloon[];
@@ -16,6 +17,8 @@ export function CameraView({
   showGrid = true,
   showCrosshair = true 
 }: CameraViewProps) {
+  const { t } = useTranslation();
+  
   // Simulated camera resolution
   const width = 1280;
   const height = 720;
@@ -32,7 +35,7 @@ export function CameraView({
       
       {/* Simulated camera feed placeholder */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-muted-foreground/30 text-lg font-mono">CAMERA FEED</span>
+        <span className="text-muted-foreground/30 text-lg font-mono">{t('camera.feed')}</span>
       </div>
 
       {/* CRT Overlay */}
@@ -118,7 +121,7 @@ export function CameraView({
             }}
           >
             {balloon.color.toUpperCase()}-{balloon.size.toUpperCase()}
-            {balloon.isTarget && ' [TGT]'}
+            {balloon.isTarget && ` [${t('target.tgt')}]`}
           </div>
         </div>
       ))}

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { DataPanel, DataRow } from '@/components/ui/DataPanel';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
@@ -27,6 +26,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PTUState } from '@/types/tracking';
+import { useTranslation } from 'react-i18next';
 
 interface PTUControlProps {
   ptuState?: PTUState;
@@ -34,6 +34,7 @@ interface PTUControlProps {
 }
 
 export function PTUControl({ ptuState, className }: PTUControlProps) {
+  const { t } = useTranslation();
   const [serialPort, setSerialPort] = useState<string>('COM3');
   const [baudRate, setBaudRate] = useState<string>('9600');
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -45,18 +46,16 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
 
   const handleConnect = () => {
     setIsConnected(!isConnected);
-    // Here you would implement actual serial port connection logic
   };
 
   const handleControl = (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
     if (!isConnected) return;
-    // Here you would implement PTU control commands
     console.log(`PTU Control: ${direction}`);
   };
 
   return (
     <DataPanel 
-      title="PTU CONTROL" 
+      title={t('ptu.control')} 
       className={className}
       status={isConnected ? 'stable' : 'warning'}
       scrollable
@@ -67,7 +66,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           <div className="flex items-center gap-2 pb-2 border-b border-border/50">
             <Settings className="w-4 h-4 text-primary" />
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
-              Serial Port Connection
+              {t('ptu.serialConnection')}
             </div>
           </div>
 
@@ -75,7 +74,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                Serial Port
+                {t('ptu.serialPort')}
               </Label>
               <Select value={serialPort} onValueChange={setSerialPort} disabled={isConnected}>
                 <SelectTrigger className="h-8 text-xs font-mono">
@@ -93,7 +92,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
 
             <div className="space-y-1.5">
               <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                Baud Rate
+                {t('ptu.baudRate')}
               </Label>
               <Select value={baudRate} onValueChange={setBaudRate} disabled={isConnected}>
                 <SelectTrigger className="h-8 text-xs font-mono">
@@ -122,19 +121,19 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
             {isConnected ? (
               <>
                 <PlugZap className="w-4 h-4" />
-                Disconnect
+                {t('ptu.disconnect')}
               </>
             ) : (
               <>
                 <Plug className="w-4 h-4" />
-                Connect
+                {t('ptu.connect')}
               </>
             )}
           </Button>
 
           {/* Connection Status */}
           <div className="flex items-center justify-between px-2 py-1.5 bg-muted/20 rounded border border-border/50">
-            <span className="text-[10px] text-muted-foreground uppercase">Status:</span>
+            <span className="text-[10px] text-muted-foreground uppercase">{t('kalman.status')}:</span>
             <div className="flex items-center gap-2">
               <div className={cn(
                 'w-2 h-2 rounded-full',
@@ -144,7 +143,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
                 'text-xs font-mono',
                 isConnected ? 'text-tactical-green' : 'text-tactical-amber'
               )}>
-                {isConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                {isConnected ? t('status.connected') : t('status.disconnected')}
               </span>
             </div>
           </div>
@@ -155,7 +154,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           <div className="flex items-center gap-2 pb-2">
             <Settings className="w-4 h-4 text-primary" />
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
-              Control
+              {t('ptu.controlSection')}
             </div>
           </div>
 
@@ -172,7 +171,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
               htmlFor="auto-tracking"
               className="text-xs font-mono cursor-pointer flex-1"
             >
-              Automatic Object Tracking
+              {t('ptu.autoTracking')}
             </Label>
             <span className={cn(
               'text-[10px] font-mono px-2 py-0.5 rounded',
@@ -180,14 +179,14 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
                 ? 'bg-tactical-green/20 text-tactical-green border border-tactical-green/50' 
                 : 'bg-tactical-amber/20 text-tactical-amber border border-tactical-amber/50'
             )}>
-              {isAutoTracking ? 'AUTO' : 'MANUAL'}
+              {isAutoTracking ? t('camera.auto') : t('camera.manual')}
             </span>
           </div>
 
           {/* Control Buttons */}
           <div className="space-y-2">
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
-              Manual Control {!isAutoTracking && '(Active)'}
+              {t('ptu.manualControl')} {!isAutoTracking && t('ptu.active')}
             </div>
             
             {/* Top Row: Left-Up, Up, Right-Up */}
@@ -322,13 +321,13 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
             <div className="pt-2 border-t border-border/50">
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-muted/20 p-2 rounded border border-border/50">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Azimuth</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t('ptu.azimuth')}</div>
                   <div className="font-mono text-lg font-bold text-tactical-cyan">
                     {ptuState.panActual.toFixed(2)}°
                   </div>
                 </div>
                 <div className="bg-muted/20 p-2 rounded border border-border/50">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pitch</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t('ptu.pitch')}</div>
                   <div className="font-mono text-lg font-bold text-tactical-cyan">
                     {ptuState.tiltActual.toFixed(2)}°
                   </div>

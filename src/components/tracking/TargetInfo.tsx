@@ -1,18 +1,13 @@
 import { DataPanel, DataRow, DataGrid, DataCell } from '@/components/ui/DataPanel';
 import type { DetectedBalloon, BalloonSize } from '@/types/tracking';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 interface TargetInfoProps {
   balloons: DetectedBalloon[];
   activeTarget: DetectedBalloon | null;
   className?: string;
 }
-
-const sizeLabels: Record<BalloonSize, string> = {
-  large: 'LRG',
-  medium: 'MED',
-  small: 'SML',
-};
 
 const sizePriority: Record<BalloonSize, number> = {
   large: 1,
@@ -21,12 +16,22 @@ const sizePriority: Record<BalloonSize, number> = {
 };
 
 export function TargetInfo({ balloons, activeTarget, className }: TargetInfoProps) {
+  const { t } = useTranslation();
   const redBalloons = balloons.filter(b => b.color === 'red');
   const sortedRed = [...redBalloons].sort((a, b) => sizePriority[a.size] - sizePriority[b.size]);
+
+  const getSizeLabel = (size: BalloonSize) => {
+    const labels: Record<BalloonSize, string> = {
+      large: t('target.large'),
+      medium: t('target.medium'),
+      small: t('target.small'),
+    };
+    return labels[size];
+  };
   
   return (
     <DataPanel 
-      title="TARGET ACQUISITION" 
+      title={t('target.title')} 
       className={className}
       status={activeTarget ? 'stable' : redBalloons.length > 0 ? 'warning' : 'error'}
       scrollable
@@ -35,13 +40,13 @@ export function TargetInfo({ balloons, activeTarget, className }: TargetInfoProp
         {/* Detection Summary */}
         <DataGrid columns={2}>
           <DataCell 
-            label="Total Detected" 
+            label={t('target.totalDetected')} 
             value={balloons.length} 
             variant="default"
             size="lg"
           />
           <DataCell 
-            label="Red (Hostile)" 
+            label={t('target.redHostile')} 
             value={redBalloons.length} 
             variant={redBalloons.length > 0 ? 'error' : 'default'}
             size="lg"
@@ -51,10 +56,10 @@ export function TargetInfo({ balloons, activeTarget, className }: TargetInfoProp
         {/* Active Target */}
         {activeTarget && (
           <div className="p-2 bg-destructive/20 border border-destructive/50 rounded">
-            <div className="text-[10px] text-destructive uppercase tracking-wider mb-1">Active Target</div>
+            <div className="text-[10px] text-destructive uppercase tracking-wider mb-1">{t('target.activeTarget')}</div>
             <div className="flex items-center justify-between">
               <span className="font-mono text-sm font-bold text-destructive glow-red">
-                {activeTarget.color.toUpperCase()}-{sizeLabels[activeTarget.size]}
+                {activeTarget.color.toUpperCase()}-{getSizeLabel(activeTarget.size)}
               </span>
               <span className="font-mono text-xs text-tactical-cyan">
                 ({activeTarget.centerX.toFixed(0)}, {activeTarget.centerY.toFixed(0)})
@@ -65,10 +70,10 @@ export function TargetInfo({ balloons, activeTarget, className }: TargetInfoProp
 
         {/* Target Queue */}
         <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Target Priority Queue</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">{t('target.priorityQueue')}</div>
           <div className="space-y-1">
             {sortedRed.length === 0 ? (
-              <div className="text-muted-foreground text-xs text-center py-2">No hostile targets</div>
+              <div className="text-muted-foreground text-xs text-center py-2">{t('target.noHostile')}</div>
             ) : (
               sortedRed.map((balloon, index) => (
                 <div 
@@ -85,7 +90,7 @@ export function TargetInfo({ balloons, activeTarget, className }: TargetInfoProp
                     <span className={cn(
                       balloon.isTarget ? 'text-destructive font-bold' : 'text-foreground'
                     )}>
-                      {sizeLabels[balloon.size]}
+                      {getSizeLabel(balloon.size)}
                     </span>
                   </div>
                   <span className="text-tactical-cyan">
