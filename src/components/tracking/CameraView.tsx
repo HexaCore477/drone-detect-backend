@@ -1,12 +1,11 @@
 import type { DetectedBalloon } from '@/types/tracking';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface CameraViewProps {
   balloons: DetectedBalloon[];
   centerX: number;
   centerY: number;
-  showGrid?: boolean;
   showCrosshair?: boolean;
 }
 
@@ -14,13 +13,13 @@ export function CameraView({
   balloons,
   centerX = 640, 
   centerY = 360,
-  showGrid = true,
   showCrosshair = true 
 }: CameraViewProps) {
   const { t } = useTranslation();
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+
+  // Create ref to store reference to img element
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const streamUrl = useMemo(() => {
     const API_BASE = import.meta.env.DEV ? '' : 'http://localhost:8000'
@@ -28,6 +27,21 @@ export function CameraView({
     // Use relative URL so Vite proxy forwards to backend (avoids CORS)
     return STREAM_URL;
   }, []);
+  
+  // Cleanup effect - runs on unmount
+  useEffect(() => {
+    console.log('CameraView mounted');
+    
+    return () => {
+      console.log('CameraView unmounting - cleaning up stream');
+      
+      // Disconnect the stream by clearing src
+      if (imgRef.current) {
+        imgRef.current.src = '';
+        console.log('Stream connection aborted');
+      }
+    };
+  }, []); // Empty deps = runs once on mount, cleanup on unmount
   
   // Simulated camera resolution
   const width = 1280;
@@ -38,11 +52,6 @@ export function CameraView({
 
   return (
     <div className="relative w-full h-full bg-black rounded overflow-hidden border border-border">
-      {/* Grid Pattern */}
-      {showGrid && (
-        <div className="absolute inset-0 grid-pattern opacity-30" />
-      )}
-      
       {/* Camera feed: MJPEG stream */}
       <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
         <img
