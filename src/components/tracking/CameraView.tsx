@@ -49,6 +49,10 @@ export function CameraView({
           key={retryKey}
           src={streamUrl}
           className="w-full h-full object-contain"
+          onError={(e) => {
+            console.error('Stream error, retrying...');
+            setTimeout(() => setRetryKey(prev => prev + 1), 2000);
+          }}
         />
       </div>
 
