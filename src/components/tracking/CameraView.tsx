@@ -1,52 +1,63 @@
 import type { DetectedBalloon } from '@/types/tracking';
+import { getCameraResolution } from '@/api';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface CameraViewProps {
   balloons: DetectedBalloon[];
-  centerX: number;
-  centerY: number;
+  centerX?: number;
+  centerY?: number;
   showCrosshair?: boolean;
 }
 
+const DEFAULT_WIDTH = 1280;
+const DEFAULT_HEIGHT = 720;
+
 export function CameraView({ 
   balloons,
-  centerX = 640, 
-  centerY = 360,
+  centerX: centerXProp,
+  centerY: centerYProp,
   showCrosshair = true 
 }: CameraViewProps) {
   const { t } = useTranslation();
   const [retryKey, setRetryKey] = useState(0);
+  const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null);
 
-  // Create ref to store reference to img element
   const imgRef = useRef<HTMLImageElement>(null);
 
   const streamUrl = useMemo(() => {
-    const API_BASE = import.meta.env.DEV ? '' : 'http://localhost:8000'
-    const STREAM_URL = `${API_BASE}/api/stream`
-    // Use relative URL so Vite proxy forwards to backend (avoids CORS)
-    return STREAM_URL;
+    const API_BASE = import.meta.env.DEV ? '' : 'http://localhost:8000';
+    return `${API_BASE}/api/stream`;
   }, []);
-  
-  // Cleanup effect - runs on unmount
+
+  const width = resolution?.width ?? DEFAULT_WIDTH;
+  const height = resolution?.height ?? DEFAULT_HEIGHT;
+
+  const centerX = centerXProp ?? width / 2;
+  const centerY = centerYProp ?? height / 2;
+
+  const fetchResolution = useCallback(async () => {
+    try {
+      const res = await getCameraResolution();
+      setResolution({ width: res.width, height: res.height });
+    } catch (err) {
+      console.warn('Could not fetch camera resolution, using defaults:', err);
+      setResolution(null);
+    }
+  }, []);
+
   useEffect(() => {
-    console.log('CameraView mounted');
-    
+    fetchResolution();
+  }, [fetchResolution]);
+
+  useEffect(() => {
     return () => {
-      console.log('CameraView unmounting - cleaning up stream');
-      
-      // Disconnect the stream by clearing src
       if (imgRef.current) {
         imgRef.current.src = '';
-        console.log('Stream connection aborted');
       }
     };
-  }, []); // Empty deps = runs once on mount, cleanup on unmount
-  
-  // Simulated camera resolution
-  const width = 1280;
-  const height = 720;
-  
+  }, []);
+
   const scaleX = (x: number) => (x / width) * 100;
   const scaleY = (y: number) => (y / height) * 100;
 

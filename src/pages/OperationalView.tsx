@@ -67,9 +67,6 @@ export function OperationalView({
           <div className="w-full h-full" style={{ maxWidth: '100%', maxHeight: '100%', aspectRatio: '16/9' }}>
             <CameraView 
               balloons={balloons}
-              centerX={640}
-              centerY={360}
-              showGrid={true}
               showCrosshair={true}
             />
           </div>
