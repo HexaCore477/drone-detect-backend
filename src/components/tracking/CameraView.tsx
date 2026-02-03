@@ -76,9 +76,6 @@ export function CameraView({
         />
       </div>
 
-      {/* CRT Overlay */}
-      <div className="crt-overlay z-10" />
-
       {/* Crosshair / Target Center */}
       {showCrosshair && (
         <div className="absolute inset-0 z-10 pointer-events-none">
@@ -94,7 +91,7 @@ export function CameraView({
           />
           {/* Center circle */}
           <div 
-            className="absolute w-8 h-8 border-2 border-primary rounded-full -translate-x-1/2 -translate-y-1/2"
+            className="absolute w-8 h-8 border-2 border-green-500 rounded-full -translate-x-1/2 -translate-y-1/2"
             style={{ 
               left: `${scaleX(centerX)}%`, 
               top: `${scaleY(centerY)}%` 
@@ -102,7 +99,7 @@ export function CameraView({
           />
           {/* Inner dot */}
           <div 
-            className="absolute w-2 h-2 bg-primary rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_hsl(var(--primary))]"
+            className="absolute w-2 h-2 bg-red-500 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_hsl(var(--primary))]"
             style={{ 
               left: `${scaleX(centerX)}%`, 
               top: `${scaleY(centerY)}%` 
