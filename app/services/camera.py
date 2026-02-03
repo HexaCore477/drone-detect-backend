@@ -42,6 +42,24 @@ def _release_capture(cap: Optional[cv2.VideoCapture]) -> None:
             logger.error("Error releasing capture: %s", e)
 
 
+def get_resolution() -> Optional[tuple[int, int]]:
+    """
+    Get frame width and height from the camera stream.
+    Returns (width, height) or None if the stream cannot be opened.
+    """
+    cap = _create_capture()
+    if cap is None:
+        return None
+    try:
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if width <= 0 or height <= 0:
+            return None
+        return (width, height)
+    finally:
+        _release_capture(cap)
+
+
 def get_frame(cap: Optional[cv2.VideoCapture]) -> tuple[Optional[cv2.VideoCapture], Optional["cv2.Mat"]]:
     """
     Read a single frame. Returns (cap, frame).

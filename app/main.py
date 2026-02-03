@@ -4,7 +4,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import stream
+from app.api.routes import camera, stream
 from app.core.config import get_settings
 
 # Mitigate FFmpeg threading issues with RTSP
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(stream.router, prefix="/api")
+    app.include_router(camera.router, prefix="/api")
 
     @app.get("/")
     def root():
