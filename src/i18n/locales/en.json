@@ -1,6 +1,6 @@
 {
   "header": {
-    "title": "BALLOON TRACKING SYSTEM",
+    "title": "Skylanx-Laser-CUAS-Sytem",
     "subtitle": "PTU Control Interface v1.0",
     "latency": "Latency"
   },
@@ -35,6 +35,9 @@
   "camera": {
     "title": "CAMERA FEED",
     "feed": "CAMERA FEED",
+    "connecting": "Connecting...",
+    "waitingFrame": "Waiting for first frame...",
+    "retry": "Retry",
     "trackingActive": "Tracking Active",
     "trackingIdle": "Tracking Idle",
     "mode": "MODE",

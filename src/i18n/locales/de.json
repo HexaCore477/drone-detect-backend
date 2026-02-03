@@ -35,6 +35,9 @@
   "camera": {
     "title": "KAMERABILD",
     "feed": "KAMERABILD",
+    "connecting": "Verbinden...",
+    "waitingFrame": "Warte auf erstes Bild...",
+    "retry": "Erneut versuchen",
     "trackingActive": "Verfolgung Aktiv",
     "trackingIdle": "Verfolgung Inaktiv",
     "mode": "MODUS",

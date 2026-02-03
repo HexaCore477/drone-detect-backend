@@ -1,6 +1,6 @@
-import { cn } from '@/lib/utils';
 import type { DetectedBalloon } from '@/types/tracking';
 import { useTranslation } from 'react-i18next';
+import { useMemo, useState } from 'react';
 
 interface CameraViewProps {
   balloons: DetectedBalloon[];
@@ -11,13 +11,23 @@ interface CameraViewProps {
 }
 
 export function CameraView({ 
-  balloons, 
+  balloons,
   centerX = 640, 
   centerY = 360,
   showGrid = true,
   showCrosshair = true 
 }: CameraViewProps) {
   const { t } = useTranslation();
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+
+  const streamUrl = useMemo(() => {
+    const API_BASE = import.meta.env.DEV ? '' : 'http://localhost:8000'
+    const STREAM_URL = `${API_BASE}/api/stream`
+    // Use relative URL so Vite proxy forwards to backend (avoids CORS)
+    return STREAM_URL;
+  }, []);
   
   // Simulated camera resolution
   const width = 1280;
@@ -33,17 +43,48 @@ export function CameraView({
         <div className="absolute inset-0 grid-pattern opacity-30" />
       )}
       
-      {/* Simulated camera feed placeholder */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-muted-foreground/30 text-lg font-mono">{t('camera.feed')}</span>
+      {/* Camera feed: MJPEG stream */}
+      <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
+        {!hasLoaded && !hasError && (
+          <span className="text-muted-foreground/50 text-sm font-mono">
+            {t('camera.connecting') ?? 'Connecting...'}
+          </span>
+        )}
+        {hasError && (
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-tactical-red text-sm font-mono">
+              Stream error (MJPEG)
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setHasError(false);
+                setHasLoaded(false);
+                setRetryKey((k) => k + 1);
+              }}
+              className="text-xs px-3 py-1 rounded border border-border hover:bg-muted"
+            >
+              {t('camera.retry') ?? 'Retry'}
+            </button>
+          </div>
+        )}
+        <img
+          key={retryKey}
+          src={streamUrl}
+          alt={t('camera.feed')}
+          className="w-full h-full object-contain"
+          style={{ display: hasError ? 'none' : 'block' }}
+          // onLoad={() => setHasLoaded(true)}
+          onError={() => setHasError(true)}
+        />
       </div>
 
       {/* CRT Overlay */}
-      <div className="crt-overlay" />
+      <div className="crt-overlay z-10" />
 
       {/* Crosshair / Target Center */}
       {showCrosshair && (
-        <>
+        <div className="absolute inset-0 z-10 pointer-events-none">
           {/* Horizontal line */}
           <div 
             className="absolute left-0 right-0 h-px bg-primary/50"
@@ -70,64 +111,11 @@ export function CameraView({
               top: `${scaleY(centerY)}%` 
             }}
           />
-        </>
+        </div>
       )}
 
-      {/* Detected Balloons */}
-      {balloons.map((balloon) => (
-        <div key={balloon.id}>
-          {/* Bounding Box */}
-          <div 
-            className={cn(
-              'absolute border-2',
-              balloon.isTarget ? 'border-tactical-red' : 'border-tactical-cyan',
-              balloon.isTarget && 'animate-pulse'
-            )}
-            style={{
-              left: `${scaleX(balloon.boundingBox.x)}%`,
-              top: `${scaleY(balloon.boundingBox.y)}%`,
-              width: `${scaleX(balloon.boundingBox.width)}%`,
-              height: `${scaleY(balloon.boundingBox.height)}%`,
-            }}
-          >
-            {/* Corner brackets */}
-            <div className="absolute -top-0.5 -left-0.5 w-3 h-3 border-t-2 border-l-2 border-inherit" />
-            <div className="absolute -top-0.5 -right-0.5 w-3 h-3 border-t-2 border-r-2 border-inherit" />
-            <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 border-b-2 border-l-2 border-inherit" />
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 border-b-2 border-r-2 border-inherit" />
-          </div>
-
-          {/* Center Point */}
-          <div 
-            className={cn(
-              'absolute w-1.5 h-1.5 rounded-full -translate-x-1/2 -translate-y-1/2',
-              balloon.isTarget ? 'bg-tactical-red shadow-[0_0_8px_hsl(var(--status-error))]' : 'bg-tactical-cyan'
-            )}
-            style={{
-              left: `${scaleX(balloon.centerX)}%`,
-              top: `${scaleY(balloon.centerY)}%`,
-            }}
-          />
-
-          {/* Label */}
-          <div 
-            className={cn(
-              'absolute font-mono text-[10px] px-1 -translate-x-1/2',
-              balloon.isTarget ? 'text-tactical-red bg-tactical-red/20' : 'text-tactical-cyan bg-tactical-cyan/20'
-            )}
-            style={{
-              left: `${scaleX(balloon.centerX)}%`,
-              top: `${scaleY(balloon.boundingBox.y) - 4}%`,
-            }}
-          >
-            {balloon.color.toUpperCase()}-{balloon.size.toUpperCase()}
-            {balloon.isTarget && ` [${t('target.tgt')}]`}
-          </div>
-        </div>
-      ))}
-
       {/* Frame Counter / Timestamp Overlay */}
-      <div className="absolute bottom-2 left-2 font-mono text-[10px] text-primary/70 bg-black/50 px-2 py-0.5 rounded">
+      <div className="absolute bottom-2 left-2 z-10 font-mono text-[10px] text-primary/70 bg-black/50 px-2 py-0.5 rounded">
         {new Date().toISOString().replace('T', ' ').slice(0, 19)}
       </div>
 
