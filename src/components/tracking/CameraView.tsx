@@ -45,37 +45,10 @@ export function CameraView({
       
       {/* Camera feed: MJPEG stream */}
       <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
-        {!hasLoaded && !hasError && (
-          <span className="text-muted-foreground/50 text-sm font-mono">
-            {t('camera.connecting') ?? 'Connecting...'}
-          </span>
-        )}
-        {hasError && (
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-tactical-red text-sm font-mono">
-              Stream error (MJPEG)
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setHasError(false);
-                setHasLoaded(false);
-                setRetryKey((k) => k + 1);
-              }}
-              className="text-xs px-3 py-1 rounded border border-border hover:bg-muted"
-            >
-              {t('camera.retry') ?? 'Retry'}
-            </button>
-          </div>
-        )}
         <img
           key={retryKey}
           src={streamUrl}
-          alt={t('camera.feed')}
           className="w-full h-full object-contain"
-          style={{ display: hasError ? 'none' : 'block' }}
-          // onLoad={() => setHasLoaded(true)}
-          onError={() => setHasError(true)}
         />
       </div>
 
