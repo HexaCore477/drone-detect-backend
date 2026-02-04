@@ -4,6 +4,7 @@ import { DataPanel } from '@/components/ui/DataPanel';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ const baudRates = ['9600', '19200', '38400', '57600', '115200'];
 
 export function PTUControl({ ptuState, className }: PTUControlProps) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [serialPorts, setSerialPorts] = useState<string[]>([]);
   const [serialPort, setSerialPort] = useState<string>('');
   const [baudRate, setBaudRate] = useState<string>('9600');
@@ -55,10 +57,15 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
     } catch (err) {
       console.warn('Failed to fetch serial ports:', err);
       setSerialPorts([]);
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.fetchPorts'),
+        description: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setPortsLoading(false);
     }
-  }, []);
+  }, [t, toast]);
 
   useEffect(() => {
     fetchPorts();
@@ -69,26 +76,65 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
       try {
         await ptuDisconnect();
         setIsConnected(false);
+        toast({
+          variant: 'default',
+          title: t('ptu.success.disconnected'),
+          description: t('ptu.success.disconnectedDesc'),
+        });
       } catch (err) {
         console.error('PTU disconnect failed:', err);
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.disconnect'),
+          description: err instanceof Error ? err.message : String(err),
+        });
       }
     } else {
-      if (!serialPort || serialPort === '_empty') return;
+      if (!serialPort || serialPort === '_empty') {
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.noPort'),
+          description: t('ptu.error.noPortDesc'),
+        });
+        return;
+      }
       try {
         await ptuConnect({ port: serialPort, baud: parseInt(baudRate, 10) });
         setIsConnected(true);
+        toast({
+          variant: 'default',
+          title: t('ptu.success.connected'),
+          description: `${t('ptu.success.connectedDesc')} ${serialPort} @ ${baudRate} baud`,
+        });
       } catch (err) {
         console.error('PTU connect failed:', err);
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.connect'),
+          description: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   };
 
   const handleControl = async (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
-    if (!isConnected) return;
+    if (!isConnected) {
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.notConnected'),
+        description: t('ptu.error.notConnectedDesc'),
+      });
+      return;
+    }
     try {
       await ptuDirection(direction);
     } catch (err) {
       console.error('PTU direction failed:', err);
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.direction'),
+        description: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 

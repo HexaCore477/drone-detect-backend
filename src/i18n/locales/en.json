@@ -67,7 +67,23 @@
     "controlSection": "Control",
     "autoTracking": "Automatic Object Tracking",
     "manualControl": "Manual Control",
-    "active": "(Active)"
+    "active": "(Active)",
+    "error": {
+      "fetchPorts": "Failed to fetch serial ports",
+      "connect": "Connection failed",
+      "disconnect": "Disconnect failed",
+      "direction": "PTU command failed",
+      "noPort": "No port selected",
+      "noPortDesc": "Please select a serial port before connecting",
+      "notConnected": "Not connected",
+      "notConnectedDesc": "Please connect to PTU before sending commands"
+    },
+    "success": {
+      "connected": "Connected",
+      "connectedDesc": "Successfully connected to PTU on",
+      "disconnected": "Disconnected",
+      "disconnectedDesc": "PTU connection closed"
+    }
   },
   "kalman": {
     "title": "KALMAN FILTER",
