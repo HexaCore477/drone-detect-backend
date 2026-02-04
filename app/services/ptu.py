@@ -2,21 +2,37 @@
 import logging
 import queue
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:  # pragma: no cover
+    import serial  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-STEP_DEG = 2.0
-DIRECTION_DELTAS: dict[str, tuple[float, float]] = {
-    "left": (-STEP_DEG, 0),
-    "right": (STEP_DEG, 0),
-    "up": (0, STEP_DEG),
-    "down": (0, -STEP_DEG),
-    "left-up": (-STEP_DEG, STEP_DEG),
-    "left-down": (-STEP_DEG, -STEP_DEG),
-    "right-up": (STEP_DEG, STEP_DEG),
-    "right-down": (STEP_DEG, -STEP_DEG),
-    "pause": (0, 0),
+#
+# PTU protocol direction commands (ASCII) as provided.
+# We send these bytes exactly over the serial port.
+#
+# LEFT:        H61,10000E
+# RIGHT:       H62,10000E
+# TOP:         H63,10000E
+# DOWN:        H64,10000E
+# TOP-RIGHT:   H60,-1,1,50E
+# DOWN-LEFT:   H60,1,-1,50E
+# DOWN-RIGHT:  H60,-1,-1,50E
+# TOP-LEFT:    H60,1,1,50E
+# STOP:        H65E
+#
+DIRECTION_COMMANDS: dict[str, bytes] = {
+    "left": b"H61,10000E",
+    "right": b"H62,10000E",
+    "up": b"H63,10000E",
+    "down": b"H64,10000E",
+    "right-up": b"H60,-1,1,50E",
+    "left-down": b"H60,1,-1,50E",
+    "right-down": b"H60,-1,-1,50E",
+    "left-up": b"H60,1,1,50E",
+    "pause": b"H65E",
 }
 
 # Sentinel to stop worker thread
@@ -76,12 +92,19 @@ def _serial_worker() -> None:
                         )
                     elif cmd[0] == "direction":
                         _, direction_name = cmd
-                        if direction_name != "pause":
-                            pan_delta, tilt_delta = DIRECTION_DELTAS[direction_name]
-                            _current_pan += pan_delta
-                            _current_tilt += tilt_delta
-                        # TODO: Send PTU protocol bytes
-                        logger.debug("PTU direction: %s", direction_name)
+                        payload = DIRECTION_COMMANDS.get(direction_name)
+                        if payload is None:
+                            raise ValueError(f"Unknown direction: {direction_name}")
+
+                        # Send ASCII command as-is
+                        _serial.write(payload)
+                        try:
+                            _serial.flush()
+                        except Exception:
+                            # Some backends may not support flush reliably; ignore.
+                            pass
+
+                        logger.debug("PTU direction sent: %s (%r)", direction_name, payload)
                     elif cmd[0] == "write":
                         _, data = cmd
                         _serial.write(data)
@@ -150,16 +173,12 @@ def direction(direction_name: str) -> tuple[bool, str]:
     direction_name: left, right, up, down, pause, left-up, left-down, right-up, right-down
     Returns (success, message). Command is queued for worker thread.
     """
-    if direction_name not in DIRECTION_DELTAS:
+    if direction_name not in DIRECTION_COMMANDS:
         return False, f"Unknown direction: {direction_name}"
     try:
         if _connected_port:
             _enqueue(("direction", direction_name))
-        elif direction_name != "pause":
-            pan_delta, tilt_delta = DIRECTION_DELTAS[direction_name]
-            global _current_pan, _current_tilt
-            _current_pan += pan_delta
-            _current_tilt += tilt_delta
+        # If not connected, we don't have hardware to move. Treat as no-op success.
         return True, "OK"
     except Exception as e:
         logger.error("PTU direction failed: %s", e)
