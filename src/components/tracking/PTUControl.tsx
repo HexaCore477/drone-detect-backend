@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { DataPanel, DataRow } from '@/components/ui/DataPanel';
+import { useCallback, useEffect, useState } from 'react';
+import { getPtuPorts, ptuDirection, ptuConnect, ptuDisconnect } from '@/api';
+import { DataPanel } from '@/components/ui/DataPanel';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -18,6 +19,7 @@ import {
   Pause,
   Plug,
   PlugZap,
+  RefreshCw,
   Settings,
   ArrowUpLeft,
   ArrowUpRight,
@@ -33,24 +35,61 @@ interface PTUControlProps {
   className?: string;
 }
 
+const baudRates = ['9600', '19200', '38400', '57600', '115200'];
+
 export function PTUControl({ ptuState, className }: PTUControlProps) {
   const { t } = useTranslation();
-  const [serialPort, setSerialPort] = useState<string>('COM3');
+  const [serialPorts, setSerialPorts] = useState<string[]>([]);
+  const [serialPort, setSerialPort] = useState<string>('');
   const [baudRate, setBaudRate] = useState<string>('9600');
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isAutoTracking, setIsAutoTracking] = useState<boolean>(true);
+  const [portsLoading, setPortsLoading] = useState<boolean>(false);
 
-  // Common serial port names
-  const serialPorts = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8'];
-  const baudRates = ['9600', '19200', '38400', '57600', '115200'];
+  const fetchPorts = useCallback(async () => {
+    setPortsLoading(true);
+    try {
+      const ports = await getPtuPorts();
+      setSerialPorts(ports);
+      setSerialPort((prev) => (ports.length > 0 && !prev ? ports[0] : prev));
+    } catch (err) {
+      console.warn('Failed to fetch serial ports:', err);
+      setSerialPorts([]);
+    } finally {
+      setPortsLoading(false);
+    }
+  }, []);
 
-  const handleConnect = () => {
-    setIsConnected(!isConnected);
+  useEffect(() => {
+    fetchPorts();
+  }, [fetchPorts]);
+
+  const handleConnect = async () => {
+    if (isConnected) {
+      try {
+        await ptuDisconnect();
+        setIsConnected(false);
+      } catch (err) {
+        console.error('PTU disconnect failed:', err);
+      }
+    } else {
+      if (!serialPort || serialPort === '_empty') return;
+      try {
+        await ptuConnect({ port: serialPort, baud: parseInt(baudRate, 10) });
+        setIsConnected(true);
+      } catch (err) {
+        console.error('PTU connect failed:', err);
+      }
+    }
   };
 
-  const handleControl = (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
+  const handleControl = async (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
     if (!isConnected) return;
-    console.log(`PTU Control: ${direction}`);
+    try {
+      await ptuDirection(direction);
+    } catch (err) {
+      console.error('PTU direction failed:', err);
+    }
   };
 
   return (
@@ -73,19 +112,42 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           {/* Serial Port Name and Baud Rate - One Line */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                {t('ptu.serialPort')}
-              </Label>
-              <Select value={serialPort} onValueChange={setSerialPort} disabled={isConnected}>
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  {t('ptu.serialPort')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={fetchPorts}
+                  disabled={portsLoading || isConnected}
+                  title={t('ptu.refreshPorts')}
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', portsLoading && 'animate-spin')} />
+                </Button>
+              </div>
+              <Select
+                value={serialPorts.length === 0 ? '_empty' : serialPort || serialPorts[0]}
+                onValueChange={(v) => v !== '_empty' && setSerialPort(v)}
+                disabled={isConnected || portsLoading}
+              >
                 <SelectTrigger className="h-8 text-xs font-mono">
-                  <SelectValue />
+                  <SelectValue placeholder={portsLoading ? t('ptu.loadingPorts') : t('ptu.selectPort')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {serialPorts.map((port) => (
-                    <SelectItem key={port} value={port} className="font-mono">
-                      {port}
+                  {serialPorts.length === 0 && !portsLoading ? (
+                    <SelectItem value="_empty" className="font-mono text-muted-foreground" disabled>
+                      {t('ptu.noPorts')}
                     </SelectItem>
-                  ))}
+                  ) : (
+                    serialPorts.map((port) => (
+                      <SelectItem key={port} value={port} className="font-mono">
+                        {port}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
