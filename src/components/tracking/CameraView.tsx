@@ -117,6 +117,20 @@ export function CameraView({
       <div className="absolute bottom-2 right-2 font-mono text-[10px] text-muted-foreground bg-black/50 px-2 py-0.5 rounded">
         {width}×{height}
       </div>
+
+      {/* Balloon bounding boxes (from tracking WebSocket) */}
+      {balloons.map((b) => (
+        <div
+          key={b.id}
+          className="absolute border-2 border-red-500 box-border z-10 pointer-events-none"
+          style={{
+            left: `${scaleX(b.boundingBox.x)}%`,
+            top: `${scaleY(b.boundingBox.y)}%`,
+            width: `${scaleX(b.boundingBox.width)}%`,
+            height: `${scaleY(b.boundingBox.height)}%`,
+          }}
+        />
+      ))}
     </div>
   );
 }
