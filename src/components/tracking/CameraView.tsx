@@ -131,6 +131,24 @@ export function CameraView({
           }}
         />
       ))}
+
+      {/* Prediction points (500ms-ahead position for each balloon) */}
+      {balloons.map((b) => {
+        const predX = b.predictedCenterX ?? b.centerX;
+        const predY = b.predictedCenterY ?? b.centerY;
+        return (
+          <div
+            key={`pred-${b.id}`}
+            className="absolute w-3 h-3 border-2 border-cyan-400 bg-cyan-400/50 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
+            style={{
+              left: `${scaleX(predX)}%`,
+              top: `${scaleY(predY)}%`,
+              boxShadow: '0 0 8px rgba(34, 211, 238, 0.8)',
+            }}
+            title={`${b.id} predicted (500ms)`}
+          />
+        );
+      })}
     </div>
   );
 }
