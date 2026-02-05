@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -203,97 +203,121 @@ def associate_detections_to_tracks(
     return unmatched_detections, tracks
 
 
+def _run_detection_and_tracking(
+    cap: Any,
+    tracks: Dict[str, Track],
+    next_track_id: int,
+) -> Tuple[Any, Dict[str, Track], int, List[Dict[str, Any]]]:
+    """
+    Run frame capture, YOLO detection, and tracking in a thread.
+    Returns (cap, tracks, next_track_id, payload_dict).
+    """
+    cap, frame = get_frame(cap)
+    if frame is None:
+        return cap, tracks, next_track_id, {"timestamp": 0, "balloons": []}
+
+    timestamp = time.time()
+
+    # Run YOLO detection (CPU/GPU heavy - main bottleneck)
+    raw_detections = detect_balloons(frame)
+
+    # Associate detections with existing tracks
+    unmatched_dets, tracks = associate_detections_to_tracks(
+        raw_detections, tracks, timestamp
+    )
+
+    # Create new tracks for unmatched detections
+    for det in unmatched_dets:
+        track_id = f"balloon-{next_track_id}"
+        next_track_id += 1
+        tracks[track_id] = Track(track_id, det, timestamp)
+
+    # Mark first track as target (can be enhanced with priority logic)
+    if tracks:
+        sorted_tracks = sorted(
+            tracks.items(),
+            key=lambda x: x[1].last_seen,
+            reverse=True,
+        )
+        for track in tracks.values():
+            track.is_target = False
+        if sorted_tracks:
+            sorted_tracks[0][1].is_target = True
+
+    # Convert tracks to payload
+    balloons: List[DetectedBalloon] = []
+    for track in tracks.values():
+        cx, cy = track.get_current_position()
+        pred_cx, pred_cy = track.predict(PREDICTION_LEAD_SEC)
+        bbox = track.get_current_bbox()
+
+        balloons.append(
+            DetectedBalloon(
+                id=track.id,
+                color=track.color,
+                size=track.size,
+                centerX=cx,
+                centerY=cy,
+                boundingBox=BoundingBox(
+                    x=bbox["bbox_x"],
+                    y=bbox["bbox_y"],
+                    width=bbox["bbox_w"],
+                    height=bbox["bbox_h"],
+                ),
+                isTarget=track.is_target,
+                predictedCenterX=pred_cx,
+                predictedCenterY=pred_cy,
+                confidence=0.85,
+            )
+        )
+
+    payload = {
+        "timestamp": int(timestamp * 1000),
+        "balloons": [b.model_dump() for b in balloons],
+    }
+    return cap, tracks, next_track_id, payload
+
+
 @router.websocket("/ws")
 async def tracking_ws(websocket: WebSocket) -> None:
     """
     Stream detections with tracking and 500ms-ahead predictions.
     Sends updates every 50ms for low latency.
+    Detection/tracking runs in a thread pool to avoid blocking the event loop.
     """
     await websocket.accept()
-    
+
     cap = _create_capture()
     tracks: Dict[str, Track] = {}
     next_track_id = 0
-    
+
     try:
         while True:
             loop_start = time.time()
-            
-            cap, frame = get_frame(cap)
-            if frame is None:
-                await asyncio.sleep(0.01)
-                continue
-            
-            timestamp = time.time()
-            
-            # Run YOLO detection
-            raw_detections = detect_balloons(frame)
-            
-            # Associate detections with existing tracks
-            unmatched_dets, tracks = associate_detections_to_tracks(
-                raw_detections, tracks, timestamp
+
+            # Run detection + tracking in thread pool to protect event loop
+            cap, tracks, next_track_id, payload = await asyncio.to_thread(
+                _run_detection_and_tracking,
+                cap,
+                tracks,
+                next_track_id,
             )
-            
-            # Create new tracks for unmatched detections
-            for det in unmatched_dets:
-                track_id = f"balloon-{next_track_id}"
-                next_track_id += 1
-                tracks[track_id] = Track(track_id, det, timestamp)
-            
-            # Mark first track as target (can be enhanced with priority logic)
-            if tracks:
-                sorted_tracks = sorted(
-                    tracks.items(),
-                    key=lambda x: x[1].last_seen,
-                    reverse=True
-                )
-                # Reset all targets
-                for track in tracks.values():
-                    track.is_target = False
-                # Set most recent as target
-                if sorted_tracks:
-                    sorted_tracks[0][1].is_target = True
-            
-            # Convert tracks to DetectedBalloon messages
-            balloons: List[DetectedBalloon] = []
-            for track in tracks.values():
-                cx, cy = track.get_current_position()
-                pred_cx, pred_cy = track.predict(PREDICTION_LEAD_SEC)
-                bbox = track.get_current_bbox()
-                
-                balloons.append(
-                    DetectedBalloon(
-                        id=track.id,
-                        color=track.color,
-                        size=track.size,
-                        centerX=cx,
-                        centerY=cy,
-                        boundingBox=BoundingBox(
-                            x=bbox["bbox_x"],
-                            y=bbox["bbox_y"],
-                            width=bbox["bbox_w"],
-                            height=bbox["bbox_h"],
-                        ),
-                        isTarget=track.is_target,
-                        predictedCenterX=pred_cx,
-                        predictedCenterY=pred_cy,
-                        confidence=0.85,  # Default, can be tracked from detection
-                    )
-                )
-            
-            # Send update
-            await websocket.send_json({
-                "timestamp": int(timestamp * 1000),
-                "balloons": [b.model_dump() for b in balloons],
-            })
-            
+
+            if payload["balloons"] or payload["timestamp"] > 0:
+                await websocket.send_json(payload)
+
+            # Recreate capture if lost
+            if cap is None:
+                cap = _create_capture()
+                await asyncio.sleep(0.05)
+                continue
+
             # Maintain 50ms send interval
             elapsed = time.time() - loop_start
             sleep_time = max(0, SEND_INTERVAL_SEC - elapsed)
             await asyncio.sleep(sleep_time)
-            
+
     except WebSocketDisconnect:
-        # Client disconnected
         pass
     finally:
         _release_capture(cap)

@@ -76,7 +76,7 @@ def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
     model = _get_model()
     
     # YOLO from ultralytics accepts numpy arrays (BGR is fine)
-    results = model(frame, verbose=False, conf=0.25)  # confidence threshold
+    results = model(frame, verbose=False, conf=0.55)  # confidence threshold
     boxes = results[0].boxes
     
     detections: List[Dict[str, Any]] = []
