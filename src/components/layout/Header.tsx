@@ -1,8 +1,10 @@
 import { cn } from '@/lib/utils';
 import { StatusIndicator } from '@/components/ui/StatusIndicator';
 import { ScenarioInfo } from '@/components/tracking/ScenarioSelector';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import type { ScenarioId, SystemStatus } from '@/types/tracking';
 import { Activity, Radio, Video, Crosshair } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface HeaderProps {
   activeScenario: ScenarioId;
@@ -11,6 +13,8 @@ interface HeaderProps {
 }
 
 export function Header({ activeScenario, systemStatus, className }: HeaderProps) {
+  const { t } = useTranslation();
+  
   return (
     <header className={cn(
       'flex items-center justify-between px-4 py-2 bg-card border-b border-border',
@@ -22,10 +26,10 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
           <Crosshair className="w-6 h-6 text-primary glow-green" />
           <div>
             <h1 className="text-lg font-bold text-primary glow-green tracking-wider">
-              BALLOON TRACKING SYSTEM
+              {t('header.title')}
             </h1>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
-              PTU Control Interface v1.0
+              {t('header.subtitle')}
             </p>
           </div>
         </div>
@@ -41,7 +45,7 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
             <Radio className="w-4 h-4 text-muted-foreground" />
             <StatusIndicator 
               status={systemStatus.connected ? 'online' : 'offline'} 
-              label="SYS" 
+              label={t('status.sys')} 
               size="sm" 
             />
           </div>
@@ -49,7 +53,7 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
             <Video className="w-4 h-4 text-muted-foreground" />
             <StatusIndicator 
               status={systemStatus.cameraOnline ? 'online' : 'offline'} 
-              label="CAM" 
+              label={t('status.cam')} 
               size="sm" 
             />
           </div>
@@ -57,7 +61,7 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
             <Activity className="w-4 h-4 text-muted-foreground" />
             <StatusIndicator 
               status={systemStatus.ptuOnline ? 'online' : 'offline'} 
-              label="PTU" 
+              label={t('status.ptu')} 
               size="sm" 
             />
           </div>
@@ -65,7 +69,7 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
 
         {/* Latency Display */}
         <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 rounded">
-          <span className="text-[10px] text-muted-foreground uppercase">Latency</span>
+          <span className="text-[10px] text-muted-foreground uppercase">{t('header.latency')}</span>
           <span className={cn(
             'font-mono text-sm font-bold',
             systemStatus.latencyMs < 100 ? 'text-tactical-green' : 
@@ -74,6 +78,9 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
             {systemStatus.latencyMs}ms
           </span>
         </div>
+
+        {/* Language Switcher */}
+        <LanguageSwitcher />
 
         {/* Time Display */}
         <div className="font-mono text-sm text-tactical-cyan">

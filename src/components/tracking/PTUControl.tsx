@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { DataPanel, DataRow } from '@/components/ui/DataPanel';
+import { useCallback, useEffect, useState } from 'react';
+import { getPtuPorts, getPtuConnectStatus, ptuDirection, ptuConnect, ptuDisconnect } from '@/api';
+import { DataPanel } from '@/components/ui/DataPanel';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ import {
   Pause,
   Plug,
   PlugZap,
+  RefreshCw,
   Settings,
   ArrowUpLeft,
   ArrowUpRight,
@@ -27,36 +29,138 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PTUState } from '@/types/tracking';
+import { useTranslation } from 'react-i18next';
 
 interface PTUControlProps {
   ptuState?: PTUState;
   className?: string;
 }
 
+const baudRates = ['9600', '19200', '38400', '57600', '115200'];
+
 export function PTUControl({ ptuState, className }: PTUControlProps) {
-  const [serialPort, setSerialPort] = useState<string>('COM3');
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [serialPorts, setSerialPorts] = useState<string[]>([]);
+  const [serialPort, setSerialPort] = useState<string>('');
   const [baudRate, setBaudRate] = useState<string>('9600');
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isAutoTracking, setIsAutoTracking] = useState<boolean>(true);
+  const [portsLoading, setPortsLoading] = useState<boolean>(false);
 
-  // Common serial port names
-  const serialPorts = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8'];
-  const baudRates = ['9600', '19200', '38400', '57600', '115200'];
+  // On initial mount / page refresh, query backend connection status
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await getPtuConnectStatus();
+        if (!cancelled) {
+          setIsConnected(status.connected);
+        }
+      } catch {
+        if (!cancelled) {
+          setIsConnected(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const handleConnect = () => {
-    setIsConnected(!isConnected);
-    // Here you would implement actual serial port connection logic
+  const fetchPorts = useCallback(async () => {
+    setPortsLoading(true);
+    try {
+      const ports = await getPtuPorts();
+      setSerialPorts(ports);
+      setSerialPort((prev) => (ports.length > 0 && !prev ? ports[0] : prev));
+    } catch (err) {
+      console.warn('Failed to fetch serial ports:', err);
+      setSerialPorts([]);
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.fetchPorts'),
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setPortsLoading(false);
+    }
+  }, [t, toast]);
+
+  useEffect(() => {
+    fetchPorts();
+  }, [fetchPorts]);
+
+  const handleConnect = async () => {
+    if (isConnected) {
+      try {
+        await ptuDisconnect();
+        setIsConnected(false);
+        toast({
+          variant: 'default',
+          title: t('ptu.success.disconnected'),
+          description: t('ptu.success.disconnectedDesc'),
+        });
+      } catch (err) {
+        console.error('PTU disconnect failed:', err);
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.disconnect'),
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else {
+      if (!serialPort || serialPort === '_empty') {
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.noPort'),
+          description: t('ptu.error.noPortDesc'),
+        });
+        return;
+      }
+      try {
+        await ptuConnect({ port: serialPort, baud: parseInt(baudRate, 10) });
+        setIsConnected(true);
+        toast({
+          variant: 'default',
+          title: t('ptu.success.connected'),
+          description: `${t('ptu.success.connectedDesc')} ${serialPort} @ ${baudRate} baud`,
+        });
+      } catch (err) {
+        console.error('PTU connect failed:', err);
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.connect'),
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   };
 
-  const handleControl = (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
-    if (!isConnected) return;
-    // Here you would implement PTU control commands
-    console.log(`PTU Control: ${direction}`);
+  const handleControl = async (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
+    if (!isConnected) {
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.notConnected'),
+        description: t('ptu.error.notConnectedDesc'),
+      });
+      return;
+    }
+    try {
+      await ptuDirection(direction);
+    } catch (err) {
+      console.error('PTU direction failed:', err);
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.direction'),
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   return (
     <DataPanel 
-      title="PTU CONTROL" 
+      title={t('ptu.control')} 
       className={className}
       status={isConnected ? 'stable' : 'warning'}
       scrollable
@@ -67,33 +171,56 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           <div className="flex items-center gap-2 pb-2 border-b border-border/50">
             <Settings className="w-4 h-4 text-primary" />
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
-              Serial Port Connection
+              {t('ptu.serialConnection')}
             </div>
           </div>
 
           {/* Serial Port Name and Baud Rate - One Line */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                Serial Port
-              </Label>
-              <Select value={serialPort} onValueChange={setSerialPort} disabled={isConnected}>
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  {t('ptu.serialPort')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={fetchPorts}
+                  disabled={portsLoading || isConnected}
+                  title={t('ptu.refreshPorts')}
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', portsLoading && 'animate-spin')} />
+                </Button>
+              </div>
+              <Select
+                value={serialPorts.length === 0 ? '_empty' : serialPort || serialPorts[0]}
+                onValueChange={(v) => v !== '_empty' && setSerialPort(v)}
+                disabled={isConnected || portsLoading}
+              >
                 <SelectTrigger className="h-8 text-xs font-mono">
-                  <SelectValue />
+                  <SelectValue placeholder={portsLoading ? t('ptu.loadingPorts') : t('ptu.selectPort')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {serialPorts.map((port) => (
-                    <SelectItem key={port} value={port} className="font-mono">
-                      {port}
+                  {serialPorts.length === 0 && !portsLoading ? (
+                    <SelectItem value="_empty" className="font-mono text-muted-foreground" disabled>
+                      {t('ptu.noPorts')}
                     </SelectItem>
-                  ))}
+                  ) : (
+                    serialPorts.map((port) => (
+                      <SelectItem key={port} value={port} className="font-mono">
+                        {port}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                Baud Rate
+                {t('ptu.baudRate')}
               </Label>
               <Select value={baudRate} onValueChange={setBaudRate} disabled={isConnected}>
                 <SelectTrigger className="h-8 text-xs font-mono">
@@ -122,19 +249,19 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
             {isConnected ? (
               <>
                 <PlugZap className="w-4 h-4" />
-                Disconnect
+                {t('ptu.disconnect')}
               </>
             ) : (
               <>
                 <Plug className="w-4 h-4" />
-                Connect
+                {t('ptu.connect')}
               </>
             )}
           </Button>
 
           {/* Connection Status */}
           <div className="flex items-center justify-between px-2 py-1.5 bg-muted/20 rounded border border-border/50">
-            <span className="text-[10px] text-muted-foreground uppercase">Status:</span>
+            <span className="text-[10px] text-muted-foreground uppercase">{t('kalman.status')}:</span>
             <div className="flex items-center gap-2">
               <div className={cn(
                 'w-2 h-2 rounded-full',
@@ -144,7 +271,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
                 'text-xs font-mono',
                 isConnected ? 'text-tactical-green' : 'text-tactical-amber'
               )}>
-                {isConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                {isConnected ? t('status.connected') : t('status.disconnected')}
               </span>
             </div>
           </div>
@@ -155,7 +282,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           <div className="flex items-center gap-2 pb-2">
             <Settings className="w-4 h-4 text-primary" />
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
-              Control
+              {t('ptu.controlSection')}
             </div>
           </div>
 
@@ -172,7 +299,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
               htmlFor="auto-tracking"
               className="text-xs font-mono cursor-pointer flex-1"
             >
-              Automatic Object Tracking
+              {t('ptu.autoTracking')}
             </Label>
             <span className={cn(
               'text-[10px] font-mono px-2 py-0.5 rounded',
@@ -180,14 +307,14 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
                 ? 'bg-tactical-green/20 text-tactical-green border border-tactical-green/50' 
                 : 'bg-tactical-amber/20 text-tactical-amber border border-tactical-amber/50'
             )}>
-              {isAutoTracking ? 'AUTO' : 'MANUAL'}
+              {isAutoTracking ? t('camera.auto') : t('camera.manual')}
             </span>
           </div>
 
           {/* Control Buttons */}
           <div className="space-y-2">
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
-              Manual Control {!isAutoTracking && '(Active)'}
+              {t('ptu.manualControl')} {!isAutoTracking && t('ptu.active')}
             </div>
             
             {/* Top Row: Left-Up, Up, Right-Up */}
@@ -322,13 +449,13 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
             <div className="pt-2 border-t border-border/50">
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-muted/20 p-2 rounded border border-border/50">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Azimuth</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t('ptu.azimuth')}</div>
                   <div className="font-mono text-lg font-bold text-tactical-cyan">
                     {ptuState.panActual.toFixed(2)}°
                   </div>
                 </div>
                 <div className="bg-muted/20 p-2 rounded border border-border/50">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pitch</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t('ptu.pitch')}</div>
                   <div className="font-mono text-lg font-bold text-tactical-cyan">
                     {ptuState.tiltActual.toFixed(2)}°
                   </div>

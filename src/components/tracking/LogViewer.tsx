@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import type { LogEntry, LogLevel } from '@/types/tracking';
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface LogViewerProps {
   logs: LogEntry[];
@@ -32,6 +33,7 @@ const categoryColors: Record<string, string> = {
 };
 
 export function LogViewer({ logs, category, maxHeight = '400px', autoScroll = true }: LogViewerProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   
   const filteredLogs = category 
@@ -56,7 +58,7 @@ export function LogViewer({ logs, category, maxHeight = '400px', autoScroll = tr
     >
       {filteredLogs.length === 0 ? (
         <div className="text-muted-foreground text-center py-4">
-          No logs available
+          {t('logs.noLogs')}
         </div>
       ) : (
         filteredLogs.map((log) => (

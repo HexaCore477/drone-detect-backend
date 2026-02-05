@@ -1,46 +1,84 @@
-import { cn } from '@/lib/utils';
 import type { DetectedBalloon } from '@/types/tracking';
+import { getCameraResolution } from '@/api';
+import { useTranslation } from 'react-i18next';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface CameraViewProps {
   balloons: DetectedBalloon[];
-  centerX: number;
-  centerY: number;
-  showGrid?: boolean;
+  centerX?: number;
+  centerY?: number;
   showCrosshair?: boolean;
 }
 
+const DEFAULT_WIDTH = 1280;
+const DEFAULT_HEIGHT = 720;
+
 export function CameraView({ 
-  balloons, 
-  centerX = 640, 
-  centerY = 360,
-  showGrid = true,
+  balloons,
+  centerX: centerXProp,
+  centerY: centerYProp,
   showCrosshair = true 
 }: CameraViewProps) {
-  // Simulated camera resolution
-  const width = 1280;
-  const height = 720;
-  
+  const { t } = useTranslation();
+  const [retryKey, setRetryKey] = useState(0);
+  const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null);
+
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const streamUrl = useMemo(() => {
+    const API_BASE = import.meta.env.DEV ? '' : 'http://localhost:8000';
+    return `${API_BASE}/api/stream`;
+  }, []);
+
+  const width = resolution?.width ?? DEFAULT_WIDTH;
+  const height = resolution?.height ?? DEFAULT_HEIGHT;
+
+  const centerX = centerXProp ?? width / 2;
+  const centerY = centerYProp ?? height / 2;
+
+  const fetchResolution = useCallback(async () => {
+    try {
+      const res = await getCameraResolution();
+      setResolution({ width: res.width, height: res.height });
+    } catch (err) {
+      console.warn('Could not fetch camera resolution, using defaults:', err);
+      setResolution(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchResolution();
+  }, [fetchResolution]);
+
+  useEffect(() => {
+    return () => {
+      if (imgRef.current) {
+        imgRef.current.src = '';
+      }
+    };
+  }, []);
+
   const scaleX = (x: number) => (x / width) * 100;
   const scaleY = (y: number) => (y / height) * 100;
 
   return (
     <div className="relative w-full h-full bg-black rounded overflow-hidden border border-border">
-      {/* Grid Pattern */}
-      {showGrid && (
-        <div className="absolute inset-0 grid-pattern opacity-30" />
-      )}
-      
-      {/* Simulated camera feed placeholder */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-muted-foreground/30 text-lg font-mono">CAMERA FEED</span>
+      {/* Camera feed: MJPEG stream */}
+      <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
+        <img
+          key={retryKey}
+          src={streamUrl}
+          className="w-full h-full object-contain"
+          onError={(e) => {
+            console.error('Stream error, retrying...');
+            setTimeout(() => setRetryKey(prev => prev + 1), 2000);
+          }}
+        />
       </div>
-
-      {/* CRT Overlay */}
-      <div className="crt-overlay" />
 
       {/* Crosshair / Target Center */}
       {showCrosshair && (
-        <>
+        <div className="absolute inset-0 z-10 pointer-events-none">
           {/* Horizontal line */}
           <div 
             className="absolute left-0 right-0 h-px bg-primary/50"
@@ -53,7 +91,7 @@ export function CameraView({
           />
           {/* Center circle */}
           <div 
-            className="absolute w-8 h-8 border-2 border-primary rounded-full -translate-x-1/2 -translate-y-1/2"
+            className="absolute w-8 h-8 border-2 border-green-500 rounded-full -translate-x-1/2 -translate-y-1/2"
             style={{ 
               left: `${scaleX(centerX)}%`, 
               top: `${scaleY(centerY)}%` 
@@ -61,70 +99,17 @@ export function CameraView({
           />
           {/* Inner dot */}
           <div 
-            className="absolute w-2 h-2 bg-primary rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_hsl(var(--primary))]"
+            className="absolute w-2 h-2 bg-red-500 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_hsl(var(--primary))]"
             style={{ 
               left: `${scaleX(centerX)}%`, 
               top: `${scaleY(centerY)}%` 
             }}
           />
-        </>
+        </div>
       )}
 
-      {/* Detected Balloons */}
-      {balloons.map((balloon) => (
-        <div key={balloon.id}>
-          {/* Bounding Box */}
-          <div 
-            className={cn(
-              'absolute border-2',
-              balloon.isTarget ? 'border-tactical-red' : 'border-tactical-cyan',
-              balloon.isTarget && 'animate-pulse'
-            )}
-            style={{
-              left: `${scaleX(balloon.boundingBox.x)}%`,
-              top: `${scaleY(balloon.boundingBox.y)}%`,
-              width: `${scaleX(balloon.boundingBox.width)}%`,
-              height: `${scaleY(balloon.boundingBox.height)}%`,
-            }}
-          >
-            {/* Corner brackets */}
-            <div className="absolute -top-0.5 -left-0.5 w-3 h-3 border-t-2 border-l-2 border-inherit" />
-            <div className="absolute -top-0.5 -right-0.5 w-3 h-3 border-t-2 border-r-2 border-inherit" />
-            <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 border-b-2 border-l-2 border-inherit" />
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 border-b-2 border-r-2 border-inherit" />
-          </div>
-
-          {/* Center Point */}
-          <div 
-            className={cn(
-              'absolute w-1.5 h-1.5 rounded-full -translate-x-1/2 -translate-y-1/2',
-              balloon.isTarget ? 'bg-tactical-red shadow-[0_0_8px_hsl(var(--status-error))]' : 'bg-tactical-cyan'
-            )}
-            style={{
-              left: `${scaleX(balloon.centerX)}%`,
-              top: `${scaleY(balloon.centerY)}%`,
-            }}
-          />
-
-          {/* Label */}
-          <div 
-            className={cn(
-              'absolute font-mono text-[10px] px-1 -translate-x-1/2',
-              balloon.isTarget ? 'text-tactical-red bg-tactical-red/20' : 'text-tactical-cyan bg-tactical-cyan/20'
-            )}
-            style={{
-              left: `${scaleX(balloon.centerX)}%`,
-              top: `${scaleY(balloon.boundingBox.y) - 4}%`,
-            }}
-          >
-            {balloon.color.toUpperCase()}-{balloon.size.toUpperCase()}
-            {balloon.isTarget && ' [TGT]'}
-          </div>
-        </div>
-      ))}
-
       {/* Frame Counter / Timestamp Overlay */}
-      <div className="absolute bottom-2 left-2 font-mono text-[10px] text-primary/70 bg-black/50 px-2 py-0.5 rounded">
+      <div className="absolute bottom-2 left-2 z-10 font-mono text-[10px] text-primary/70 bg-black/50 px-2 py-0.5 rounded">
         {new Date().toISOString().replace('T', ' ').slice(0, 19)}
       </div>
 
