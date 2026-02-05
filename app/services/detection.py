@@ -54,50 +54,78 @@ def _get_model() -> "YOLO":
     return _MODEL
 
 
+# Class names that count as "red" (case-insensitive)
+RED_CLASS_NAMES = frozenset({"red", "red_balloon", "balloon_red"})
+
+
+def _is_red_class(class_name: str) -> bool:
+    """Return True if the class represents a red balloon."""
+    return class_name.lower().strip() in RED_CLASS_NAMES
+
+
 def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
     """
-    Run YOLO detection on a single BGR frame and return a list of balloon detections.
+    Run YOLO detection and return at most ONE target balloon.
+    Selection rule:
+      1. If any red balloons exist -> pick the LARGEST red balloon.
+      2. If no red balloons -> pick the LARGEST balloon (any color).
     
     Args:
         frame: OpenCV BGR image (numpy array)
     
     Returns:
-        List of detection dicts with structure:
-        {
-            "bbox_x": float,      # left edge
-            "bbox_y": float,      # top edge
-            "bbox_w": float,      # width
-            "bbox_h": float,      # height
-            "centerX": float,     # center X coordinate
-            "centerY": float,     # center Y coordinate
-            "confidence": float,  # detection confidence score
-        }
+        List with 0 or 1 detection dict(s).
     """
     model = _get_model()
-    
-    # YOLO from ultralytics accepts numpy arrays (BGR is fine)
-    results = model(frame, verbose=False, conf=0.55)  # confidence threshold
+    results = model(frame, verbose=False, conf=0.5, iou=0.45)
     boxes = results[0].boxes
-    
-    detections: List[Dict[str, Any]] = []
-    
-    for box in boxes:
-        # xyxy format: [x1, y1, x2, y2]
+    names = model.names  # class_id -> class_name
+
+    candidates: List[Dict[str, Any]] = []
+
+    for i, box in enumerate(boxes):
         x1, y1, x2, y2 = box.xyxy[0].tolist()
         w = x2 - x1
         h = y2 - y1
-        cx = x1 + w / 2.0
-        cy = y1 + h / 2.0
-        conf = float(box.conf[0].item())
-        
-        detections.append({
+        if w <= 0 or h <= 0:
+            continue
+        area = w * h
+        cls_id = int(box.cls[0].item())
+        class_name = names.get(cls_id, "") if isinstance(names, dict) else (names[cls_id] if cls_id < len(names) else "")
+        is_red = _is_red_class(class_name)
+
+        candidates.append({
             "bbox_x": float(x1),
             "bbox_y": float(y1),
             "bbox_w": float(w),
             "bbox_h": float(h),
-            "centerX": float(cx),
-            "centerY": float(cy),
-            "confidence": conf,
+            "centerX": float(x1 + w / 2.0),
+            "centerY": float(y1 + h / 2.0),
+            "confidence": float(box.conf[0].item()),
+            "area": area,
+            "is_red": is_red,
         })
-    
-    return detections
+
+    if not candidates:
+        return []
+
+    red_balloons = [c for c in candidates if c["is_red"]]
+
+    # Rule 1: If any red balloons -> largest red
+    if red_balloons:
+        best = max(red_balloons, key=lambda c: c["area"])
+    else:
+        # Rule 2: No red -> largest balloon (any color)
+        best = max(candidates, key=lambda c: c["area"])
+
+    # Remove internal fields before returning
+    out = {
+        "bbox_x": best["bbox_x"],
+        "bbox_y": best["bbox_y"],
+        "bbox_w": best["bbox_w"],
+        "bbox_h": best["bbox_h"],
+        "centerX": best["centerX"],
+        "centerY": best["centerY"],
+        "confidence": best["confidence"],
+    }
+    return [out]

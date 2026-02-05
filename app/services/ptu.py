@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 # STOP:        H65E
 #
 DIRECTION_COMMANDS: dict[str, bytes] = {
-    "left": b"H61,10000E",
-    "right": b"H62,10000E",
-    "up": b"H63,10000E",
-    "down": b"H64,10000E",
-    "right-up": b"H60,-1,1,50E",
-    "left-down": b"H60,1,-1,50E",
-    "right-down": b"H60,-1,-1,50E",
-    "left-up": b"H60,1,1,50E",
+    "left": b"H61,30E",
+    "right": b"H62,30E",
+    "up": b"H63,30E",
+    "down": b"H64,30E",
+    "right-up": b"H60,-1,1,30E",
+    "left-down": b"H60,1,-1,30E",
+    "right-down": b"H60,-1,-1,30E",
+    "left-up": b"H60,1,1,30E",
     "pause": b"H65E",
 }
 

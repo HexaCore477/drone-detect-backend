@@ -210,6 +210,9 @@ def _run_detection_and_tracking(
 ) -> Tuple[Any, Dict[str, Track], int, List[Dict[str, Any]]]:
     """
     Run frame capture, YOLO detection, and tracking in a thread.
+    Single-target mode: detection returns at most 1 balloon. We always use the
+    current detection directly (no IoU association) so tracking stays correct
+    after PTU movement when the view shifts.
     Returns (cap, tracks, next_track_id, payload_dict).
     """
     cap, frame = get_frame(cap)
@@ -218,31 +221,26 @@ def _run_detection_and_tracking(
 
     timestamp = time.time()
 
-    # Run YOLO detection (CPU/GPU heavy - main bottleneck)
+    # Run YOLO detection (returns 0 or 1 target)
     raw_detections = detect_balloons(frame)
 
-    # Associate detections with existing tracks
-    unmatched_dets, tracks = associate_detections_to_tracks(
-        raw_detections, tracks, timestamp
-    )
-
-    # Create new tracks for unmatched detections
-    for det in unmatched_dets:
-        track_id = f"balloon-{next_track_id}"
-        next_track_id += 1
-        tracks[track_id] = Track(track_id, det, timestamp)
-
-    # Mark first track as target (can be enhanced with priority logic)
-    if tracks:
-        sorted_tracks = sorted(
-            tracks.items(),
-            key=lambda x: x[1].last_seen,
-            reverse=True,
-        )
-        for track in tracks.values():
-            track.is_target = False
-        if sorted_tracks:
-            sorted_tracks[0][1].is_target = True
+    # Single-target mode: always use current detection for the single track.
+    # No IoU association - always update with latest detection. This avoids
+    # mismatch after PTU movement when the view shifts and IoU would fail.
+    if raw_detections:
+        det = raw_detections[0]
+        if len(tracks) == 1:
+            track = next(iter(tracks.values()))
+            track.update(det, timestamp)
+        else:
+            tracks.clear()
+            track_id = f"balloon-{next_track_id}"
+            next_track_id += 1
+            track = Track(track_id, det, timestamp)
+            tracks[track_id] = track
+        track.is_target = True
+    else:
+        tracks.clear()
 
     # Convert tracks to payload
     balloons: List[DetectedBalloon] = []
