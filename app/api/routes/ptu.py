@@ -28,6 +28,12 @@ def get_ports():
     return {"ports": ports}
 
 
+@router.get("/connect-status")
+def connect_status():
+    """Return whether PTU is currently connected."""
+    return {"connected": ptu_service.is_connected()}
+
+
 @router.post("/connect")
 def ptu_connect(body: ConnectBody):
     """Connect to PTU on the given serial port."""
