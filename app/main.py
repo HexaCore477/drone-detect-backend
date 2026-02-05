@@ -1,14 +1,22 @@
 """FastAPI application factory and configuration."""
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import camera, stream
+from app.api.routes import camera, ptu, stream
 from app.core.config import get_settings
+from app.services import ptu as ptu_service
 
 # Mitigate FFmpeg threading issues with RTSP
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp|threads;1"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    ptu_service.disconnect()
 
 
 def create_app() -> FastAPI:
@@ -18,6 +26,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Drone Detection API",
         description="Hikvision camera streaming and drone detection",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
@@ -30,6 +39,7 @@ def create_app() -> FastAPI:
 
     app.include_router(stream.router, prefix="/api")
     app.include_router(camera.router, prefix="/api")
+    app.include_router(ptu.router, prefix="/api")
 
     @app.get("/")
     def root():
