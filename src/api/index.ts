@@ -7,7 +7,9 @@ export {
   ptuDirection,
   ptuConnect,
   ptuDisconnect,
+  getPtuConnectStatus,
   type MovePayload,
   type PtuDirection,
   type ConnectPayload,
+  type PtuConnectStatus,
 } from './ptu';

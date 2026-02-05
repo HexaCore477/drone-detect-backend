@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getPtuPorts, ptuDirection, ptuConnect, ptuDisconnect } from '@/api';
+import { getPtuPorts, getPtuConnectStatus, ptuDirection, ptuConnect, ptuDisconnect } from '@/api';
 import { DataPanel } from '@/components/ui/DataPanel';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -47,6 +47,26 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isAutoTracking, setIsAutoTracking] = useState<boolean>(true);
   const [portsLoading, setPortsLoading] = useState<boolean>(false);
+
+  // On initial mount / page refresh, query backend connection status
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await getPtuConnectStatus();
+        if (!cancelled) {
+          setIsConnected(status.connected);
+        }
+      } catch {
+        if (!cancelled) {
+          setIsConnected(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchPorts = useCallback(async () => {
     setPortsLoading(true);

@@ -21,6 +21,10 @@ export interface ConnectPayload {
   baud?: number;
 }
 
+export interface PtuConnectStatus {
+  connected: boolean;
+}
+
 async function ptuPost(path: string, body?: object): Promise<void> {
   const res = await fetch(apiUrl(path), {
     method: 'POST',
@@ -60,4 +64,13 @@ export async function ptuConnect(payload: ConnectPayload): Promise<void> {
 
 export async function ptuDisconnect(): Promise<void> {
   await ptuPost('/ptu/disconnect');
+}
+
+export async function getPtuConnectStatus(): Promise<PtuConnectStatus> {
+  const res = await fetch(apiUrl('/ptu/connect-status'));
+  if (!res.ok) {
+    throw new Error(`Failed to get PTU connect status: ${res.statusText}`);
+  }
+  const data = await res.json();
+  return { connected: Boolean(data.connected) };
 }
