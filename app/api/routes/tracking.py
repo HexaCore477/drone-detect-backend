@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Any, Dict, List, Optional, Tuple
+import threading
 
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -18,6 +19,31 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 MAX_TRACK_AGE_SEC = 2.0  # Remove tracks older than this
 PREDICTION_LEAD_SEC = 0.5  # 500ms ahead
 SEND_INTERVAL_SEC = 0.05  # 50ms between sends
+
+# Shared last prediction for backend PTU auto-tracking
+_last_prediction_lock = threading.Lock()
+_last_prediction: Optional[Dict[str, float]] = None
+
+
+def set_last_prediction(x: float, y: float, width: int, height: int, timestamp: float) -> None:
+    """Store last predicted point and frame size for backend auto-tracking."""
+    global _last_prediction
+    with _last_prediction_lock:
+        _last_prediction = {
+            "x": float(x),
+            "y": float(y),
+            "width": float(width),
+            "height": float(height),
+            "timestamp": float(timestamp),
+        }
+
+
+def get_last_prediction() -> Optional[Dict[str, float]]:
+    """Return a copy of the last prediction for backend auto-tracking."""
+    with _last_prediction_lock:
+        if _last_prediction is None:
+            return None
+        return dict(_last_prediction)
 
 
 class KalmanFilter2D:
@@ -272,6 +298,7 @@ def _run_detection_and_tracking(
         return cap, tracks, next_track_id, {"timestamp": 0, "balloons": []}
 
     timestamp = time.time()
+    frame_height, frame_width = frame.shape[:2]
 
     # Run YOLO detection (returns 0 or 1 target)
     raw_detections = detect_balloons(frame)
@@ -300,6 +327,9 @@ def _run_detection_and_tracking(
         cx, cy = track.get_current_position()
         pred_cx, pred_cy = track.predict(PREDICTION_LEAD_SEC)
         bbox = track.get_current_bbox()
+
+        # Update shared prediction for backend PTU auto-tracking
+        set_last_prediction(pred_cx, pred_cy, frame_width, frame_height, timestamp)
 
         balloons.append(
             DetectedBalloon(
