@@ -67,8 +67,9 @@ def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
     """
     Run YOLO detection and return at most ONE target balloon.
     Selection rule:
-      1. If any red balloons exist -> pick the LARGEST red balloon.
-      2. If no red balloons -> pick the LARGEST balloon (any color).
+      1. If there are several balloons -> first target the red balloon.
+      2. If there are several red balloons -> detect the largest red balloon.
+      3. If no red balloons -> pick the largest balloon (any color).
     
     Args:
         frame: OpenCV BGR image (numpy array)
@@ -77,7 +78,7 @@ def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
         List with 0 or 1 detection dict(s).
     """
     model = _get_model()
-    results = model(frame, verbose=False, conf=0.5, iou=0.45)
+    results = model(frame, verbose=False, conf=0.45, iou=0.5)
     boxes = results[0].boxes
     names = model.names  # class_id -> class_name
 
