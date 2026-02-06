@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_HFOV_DEG = 60.0  # Horizontal field of view in degrees
 DEADBAND_PX = 5.0  # Don't move if error is smaller than this (pixels)
 MAX_STEP_DEG = 2.0  # Maximum step per update in degrees
-AUTO_TRACKING_SPEED = 50  # PTU speed for auto-tracking moves
+AUTO_TRACKING_SPEED = 10  # PTU speed for auto-tracking moves
 UPDATE_INTERVAL_SEC = 0.1  # Check every 100ms
 PREDICTION_LEAD_SEC = 0.5  # 500ms ahead prediction
 # PTU axis inversion

@@ -20,7 +20,7 @@ MAX_TRACK_AGE_SEC = 2.0  # Remove tracks older than this
 PREDICTION_LEAD_SEC = 0.5  # 500ms ahead
 SEND_INTERVAL_SEC = 0.05  # 50ms between sends
 
-# Shared last prediction for backend PTU auto-tracking
+# Shared last prediction for backend PTU auto-tracking (primary target only)
 _last_prediction_lock = threading.Lock()
 _last_prediction: Optional[Dict[str, float]] = None
 
@@ -149,7 +149,8 @@ class Track:
     def __init__(self, track_id: str, detection: Dict, timestamp: float):
         self.id = track_id
         self.last_seen = timestamp
-        self.color = "red"
+        # Color label based on detection (red vs other)
+        self.color = "red" if detection.get("is_red") else "other"
         self.size = "medium"
         self.is_target = False
 
@@ -288,9 +289,12 @@ def _run_detection_and_tracking(
 ) -> Tuple[Any, Dict[str, Track], int, List[Dict[str, Any]]]:
     """
     Run frame capture, YOLO detection, and tracking in a thread.
-    Single-target mode: detection returns at most 1 balloon. We always use the
-    current detection directly (no IoU association) so tracking stays correct
-    after PTU movement when the view shifts.
+
+    Multi-object mode:
+      - YOLO returns all detections for the frame.
+      - Detections are associated to existing tracks using IoU.
+      - Each track has its own Kalman filter and unique predicted position.
+
     Returns (cap, tracks, next_track_id, payload_dict).
     """
     cap, frame = get_frame(cap)
@@ -300,42 +304,73 @@ def _run_detection_and_tracking(
     timestamp = time.time()
     frame_height, frame_width = frame.shape[:2]
 
-    # Run YOLO detection (returns 0 or 1 target)
+    # Run YOLO detection (returns all current balloons)
     raw_detections = detect_balloons(frame)
 
-    # Single-target mode: always use current detection for the single track.
-    # No IoU association - always update with latest detection. This avoids
-    # mismatch after PTU movement when the view shifts and IoU would fail.
     if raw_detections:
-        det = raw_detections[0]
-        if len(tracks) == 1:
-            track = next(iter(tracks.values()))
-            track.update(det, timestamp)
-        else:
-            tracks.clear()
+        # Update existing tracks using IoU association
+        unmatched_detections, tracks = associate_detections_to_tracks(
+            raw_detections, tracks, timestamp
+        )
+
+        # Create new tracks for unmatched detections
+        for det in unmatched_detections:
             track_id = f"balloon-{next_track_id}"
             next_track_id += 1
-            track = Track(track_id, det, timestamp)
-            tracks[track_id] = track
-        track.is_target = True
-    else:
-        tracks.clear()
+            tracks[track_id] = Track(track_id, det, timestamp)
 
-    # Convert tracks to payload
-    balloons: List[DetectedBalloon] = []
+    # Build per-track data first (for filtering by red / area)
+    track_items: List[Dict[str, Any]] = []
     for track in tracks.values():
         cx, cy = track.get_current_position()
         pred_cx, pred_cy = track.predict(PREDICTION_LEAD_SEC)
         bbox = track.get_current_bbox()
+        area = bbox["bbox_w"] * bbox["bbox_h"]
+        track_items.append(
+            {
+                "track": track,
+                "cx": cx,
+                "cy": cy,
+                "pred_cx": pred_cx,
+                "pred_cy": pred_cy,
+                "bbox": bbox,
+                "area": area,
+            }
+        )
 
-        # Update shared prediction for backend PTU auto-tracking
-        set_last_prediction(pred_cx, pred_cy, frame_width, frame_height, timestamp)
+    balloons: List[DetectedBalloon] = []
+    primary_pred: Optional[Dict[str, float]] = None
+
+    if track_items:
+        # Rule:
+        # 1. If red balloons exist -> show only the largest red balloon.
+        # 2. If no red balloons    -> show only the largest balloon (any color).
+        red_items = [item for item in track_items if item["track"].color == "red"]
+        if red_items:
+            primary_item = max(red_items, key=lambda it: it["area"])
+        else:
+            primary_item = max(track_items, key=lambda it: it["area"])
+
+        t = primary_item["track"]
+        cx = primary_item["cx"]
+        cy = primary_item["cy"]
+        pred_cx = primary_item["pred_cx"]
+        pred_cy = primary_item["pred_cy"]
+        bbox = primary_item["bbox"]
+
+        t.is_target = True
+        primary_pred = {
+            "x": pred_cx,
+            "y": pred_cy,
+            "width": float(frame_width),
+            "height": float(frame_height),
+        }
 
         balloons.append(
             DetectedBalloon(
-                id=track.id,
-                color=track.color,
-                size=track.size,
+                id=t.id,
+                color=t.color,
+                size=t.size,
                 centerX=cx,
                 centerY=cy,
                 boundingBox=BoundingBox(
@@ -344,11 +379,21 @@ def _run_detection_and_tracking(
                     width=bbox["bbox_w"],
                     height=bbox["bbox_h"],
                 ),
-                isTarget=track.is_target,
+                isTarget=t.is_target,
                 predictedCenterX=pred_cx,
                 predictedCenterY=pred_cy,
                 confidence=0.85,
             )
+        )
+
+    # Update shared prediction for backend PTU auto-tracking (primary track only)
+    if primary_pred is not None:
+        set_last_prediction(
+            primary_pred["x"],
+            primary_pred["y"],
+            int(primary_pred["width"]),
+            int(primary_pred["height"]),
+            timestamp,
         )
 
     payload = {
