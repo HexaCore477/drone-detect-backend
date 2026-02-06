@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getPtuPorts, getPtuConnectStatus, ptuDirection, ptuConnect, ptuDisconnect } from '@/api';
+import { getPtuPorts, getPtuConnectStatus, ptuDirection, ptuConnect, ptuDisconnect, getAutoTracking, setAutoTracking } from '@/api';
 import { DataPanel } from '@/components/ui/DataPanel';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -45,21 +45,27 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
   const [serialPort, setSerialPort] = useState<string>('');
   const [baudRate, setBaudRate] = useState<string>('9600');
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [isAutoTracking, setIsAutoTracking] = useState<boolean>(true);
+  const [isAutoTracking, setIsAutoTracking] = useState<boolean>(false);
   const [portsLoading, setPortsLoading] = useState<boolean>(false);
 
-  // On initial mount / page refresh, query backend connection status
+  // On initial mount / page refresh, query backend connection status and auto-tracking config
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const status = await getPtuConnectStatus();
+        const [status, config] = await Promise.all([
+          getPtuConnectStatus(),
+          getAutoTracking(),
+        ]);
         if (!cancelled) {
           setIsConnected(status.connected);
+          setIsAutoTracking(config.is_auto_tracking);
         }
-      } catch {
+      } catch (err) {
+        console.warn('Failed to fetch initial state:', err);
         if (!cancelled) {
           setIsConnected(false);
+          setIsAutoTracking(false);
         }
       }
     })();
@@ -291,7 +297,22 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
             <Checkbox
               id="auto-tracking"
               checked={isAutoTracking}
-              onCheckedChange={(checked) => setIsAutoTracking(checked === true)}
+              onCheckedChange={async (checked) => {
+                const newValue = checked === true;
+                setIsAutoTracking(newValue);
+                try {
+                  await setAutoTracking(newValue);
+                } catch (err) {
+                  console.error('Failed to save auto-tracking config:', err);
+                  toast({
+                    variant: 'destructive',
+                    title: t('ptu.error.direction'),
+                    description: err instanceof Error ? err.message : 'Failed to save config',
+                  });
+                  // Revert on error
+                  setIsAutoTracking(!newValue);
+                }
+              }}
               disabled={!isConnected}
               className="border-primary data-[state=checked]:bg-primary"
             />
