@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import deque
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
@@ -18,6 +18,83 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 MAX_TRACK_AGE_SEC = 2.0  # Remove tracks older than this
 PREDICTION_LEAD_SEC = 0.5  # 500ms ahead
 SEND_INTERVAL_SEC = 0.05  # 50ms between sends
+
+
+class KalmanFilter2D:
+    """
+    Constant-velocity Kalman filter for 2D position tracking.
+    State: [x, y, vx, vy]
+    """
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        dt: float = 0.05,
+        process_noise: float = 50.0,
+        measurement_noise: float = 10.0,
+    ):
+        # State: [x, y, vx, vy]
+        self.state = np.array([[x], [y], [0.0], [0.0]], dtype=float)
+        self.dt = dt
+
+        # State transition: x' = x + vx*dt, y' = y + vy*dt, vx' = vx, vy' = vy
+        self.F = np.array([
+            [1, 0, dt, 0],
+            [0, 1, 0, dt],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ], dtype=float)
+
+        # Measurement: we observe [x, y]
+        self.H = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+        ], dtype=float)
+
+        # Process noise covariance (acceleration uncertainty)
+        q = process_noise
+        self.Q = np.array([
+            [q * dt**4 / 4, 0, q * dt**3 / 2, 0],
+            [0, q * dt**4 / 4, 0, q * dt**3 / 2],
+            [q * dt**3 / 2, 0, q * dt**2, 0],
+            [0, q * dt**3 / 2, 0, q * dt**2],
+        ], dtype=float)
+
+        # Measurement noise covariance
+        r = measurement_noise
+        self.R = np.array([[r, 0], [0, r]], dtype=float)
+
+        # State covariance
+        self.P = np.eye(4, dtype=float) * 100.0
+
+    def predict(self, dt: Optional[float] = None) -> Tuple[float, float]:
+        """Predict state ahead. Returns (x, y)."""
+        dt_use = dt if dt is not None else self.dt
+        F = np.array([
+            [1, 0, dt_use, 0],
+            [0, 1, 0, dt_use],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ], dtype=float)
+        self.state = F @ self.state
+        self.P = F @ self.P @ F.T + self.Q
+        return float(self.state[0, 0]), float(self.state[1, 0])
+
+    def update(self, x: float, y: float) -> Tuple[float, float]:
+        """Update with measurement. Returns (x, y)."""
+        z = np.array([[x], [y]], dtype=float)
+        y_res = z - self.H @ self.state
+        S = self.H @ self.P @ self.H.T + self.R
+        K = self.P @ self.H.T @ np.linalg.inv(S)
+        self.state = self.state + K @ y_res
+        self.P = (np.eye(4) - K @ self.H) @ self.P
+        return float(self.state[0, 0]), float(self.state[1, 0])
+
+    def predict_ahead(self, lead_seconds: float) -> Tuple[float, float]:
+        """Predict position lead_seconds into the future (does not modify state)."""
+        x, y, vx, vy = self.state[:, 0]
+        return float(x + vx * lead_seconds), float(y + vy * lead_seconds)
 
 
 class BoundingBox(BaseModel):
@@ -41,79 +118,54 @@ class DetectedBalloon(BaseModel):
 
 
 class Track:
-    """Represents a tracked balloon across multiple frames."""
-    
+    """Represents a tracked balloon with Kalman-filtered position and prediction."""
+
     def __init__(self, track_id: str, detection: Dict, timestamp: float):
         self.id = track_id
-        # Store (cx, cy, bbox_x, bbox_y, bbox_w, bbox_h, t) for full state
-        self.history: Deque[Tuple[float, float, float, float, float, float, float]] = deque(
-            maxlen=10
-        )
-        self.history.append((
-            detection["centerX"],
-            detection["centerY"],
-            detection["bbox_x"],
-            detection["bbox_y"],
-            detection["bbox_w"],
-            detection["bbox_h"],
-            timestamp
-        ))
         self.last_seen = timestamp
-        self.color = "red"  # Default, can be enhanced with class info
-        self.size = "medium"  # Default
+        self.color = "red"
+        self.size = "medium"
         self.is_target = False
-        
-    def update(self, detection: Dict, timestamp: float):
-        """Update track with new detection."""
-        self.history.append((
-            detection["centerX"],
-            detection["centerY"],
-            detection["bbox_x"],
-            detection["bbox_y"],
-            detection["bbox_w"],
-            detection["bbox_h"],
-            timestamp
-        ))
-        self.last_seen = timestamp
-        
-    def predict(self, lead_seconds: float) -> Tuple[float, float]:
-        """
-        Predict position lead_seconds ahead using linear extrapolation.
-        Returns (predicted_cx, predicted_cy).
-        """
-        if len(self.history) < 2:
-            # Not enough history, return current position
-            cx, cy, _, _, _, _, _ = self.history[-1]
-            return cx, cy
-        
-        # Use last two points to estimate velocity
-        (cx1, cy1, _, _, _, _, t1), (cx2, cy2, _, _, _, _, t2) = list(self.history)[-2:]
-        dt = t2 - t1
-        if dt <= 0:
-            return cx2, cy2
-        
-        vx = (cx2 - cx1) / dt
-        vy = (cy2 - cy1) / dt
-        
-        predicted_cx = cx2 + vx * lead_seconds
-        predicted_cy = cy2 + vy * lead_seconds
-        
-        return predicted_cx, predicted_cy
-    
-    def get_current_position(self) -> Tuple[float, float]:
-        """Get most recent position."""
-        cx, cy, _, _, _, _, _ = self.history[-1]
-        return cx, cy
-    
-    def get_current_bbox(self) -> Dict:
-        """Get most recent bounding box."""
-        _, _, bbox_x, bbox_y, bbox_w, bbox_h, _ = self.history[-1]
-        return {
-            "bbox_x": bbox_x,
-            "bbox_y": bbox_y,
-            "bbox_w": bbox_w,
-            "bbox_h": bbox_h,
+
+        cx = detection["centerX"]
+        cy = detection["centerY"]
+        self.kalman = KalmanFilter2D(cx, cy, dt=SEND_INTERVAL_SEC)
+        self.kalman.update(cx, cy)
+
+        # Store bbox from last detection (Kalman only tracks center)
+        self._bbox = {
+            "bbox_x": detection["bbox_x"],
+            "bbox_y": detection["bbox_y"],
+            "bbox_w": detection["bbox_w"],
+            "bbox_h": detection["bbox_h"],
         }
+
+    def update(self, detection: Dict, timestamp: float):
+        """Update track with new detection; Kalman filter smooths and estimates velocity."""
+        cx = detection["centerX"]
+        cy = detection["centerY"]
+        self.kalman.predict(dt=timestamp - self.last_seen)
+        self.kalman.update(cx, cy)
+        self.last_seen = timestamp
+        self._bbox = {
+            "bbox_x": detection["bbox_x"],
+            "bbox_y": detection["bbox_y"],
+            "bbox_w": detection["bbox_w"],
+            "bbox_h": detection["bbox_h"],
+        }
+
+    def predict(self, lead_seconds: float) -> Tuple[float, float]:
+        """Predict position lead_seconds ahead using Kalman filter."""
+        return self.kalman.predict_ahead(lead_seconds)
+
+    def get_current_position(self) -> Tuple[float, float]:
+        """Get Kalman-filtered current position."""
+        x, y = self.kalman.state[0, 0], self.kalman.state[1, 0]
+        return float(x), float(y)
+
+    def get_current_bbox(self) -> Dict:
+        """Get most recent bounding box from last detection."""
+        return dict(self._bbox)
 
 
 def calculate_iou(bbox1: Dict, bbox2: Dict) -> float:
