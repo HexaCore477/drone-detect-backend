@@ -2,7 +2,7 @@ import { CameraView } from '@/components/tracking/CameraView';
 import { KalmanDisplay } from '@/components/tracking/KalmanDisplay';
 import { PTUControl } from '@/components/tracking/PTUControl';
 import { ScenarioSelector } from '@/components/tracking/ScenarioSelector';
-import { DataPanel, DataRow, DataGrid, DataCell } from '@/components/ui/DataPanel';
+import { DataPanel, DataGrid, DataCell } from '@/components/ui/DataPanel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { 
   DetectedBalloon, 
@@ -11,7 +11,6 @@ import type {
   ScenarioId,
   SystemStatus 
 } from '@/types/tracking';
-import { SCENARIOS } from '@/data/scenarios';
 import { useTranslation } from 'react-i18next';
 
 interface OperationalViewProps {
@@ -32,7 +31,6 @@ export function OperationalView({
   systemStatus,
 }: OperationalViewProps) {
   const { t } = useTranslation();
-  const scenario = SCENARIOS[activeScenario];
   
   return (
     <div className="h-full flex min-h-0">
@@ -44,16 +42,6 @@ export function OperationalView({
               activeScenario={activeScenario} 
               onSelect={onScenarioChange} 
             />
-            <DataPanel title={t('scenario.config')} status="stable" scrollable>
-              <div className="space-y-1 text-sm">
-                <DataRow label={t('scenario.distance')} value={scenario.distance} unit="m" />
-                <DataRow label={t('scenario.zoom')} value={`${scenario.zoom}×`} />
-                <DataRow label={t('scenario.deadband')} value="5" unit="px" />
-                <DataRow label={t('scenario.maxRate')} value="10.0" unit="°/s" />
-                <DataRow label={t('scenario.maxStep')} value="2.0" unit="°" />
-                <DataRow label={t('scenario.latency')} value="200" unit="ms" />
-              </div>
-            </DataPanel>
 
             <KalmanDisplay state={kalmanState} />
           </div>
@@ -133,15 +121,6 @@ export function OperationalView({
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col gap-3 pr-2">
             <PTUControl ptuState={ptuState} />
-            
-            <DataPanel title={t('emitter.title')} status="stable">
-              <div className="space-y-1 text-sm">
-                <DataRow label={t('emitter.panOffset')} value="0.00" unit="°" />
-                <DataRow label={t('emitter.tiltOffset')} value="0.00" unit="°" />
-                <DataRow label={t('emitter.focus')} value={t('camera.auto')} />
-                <DataRow label={t('emitter.power')} value="100" unit="%" />
-              </div>
-            </DataPanel>
           </div>
         </ScrollArea>
       </div>
