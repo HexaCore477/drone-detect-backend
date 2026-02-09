@@ -14,6 +14,7 @@ VALID_DIRECTIONS = frozenset(
 class MoveBody(BaseModel):
     pan: float = 0
     tilt: float = 0
+    speed: int | None = None  # PTU speed (default 4000)
 
 
 class ConnectBody(BaseModel):
@@ -34,6 +35,22 @@ def connect_status():
     return {"connected": ptu_service.is_connected()}
 
 
+@router.get("/position")
+def get_position():
+    """Return cached (pan, tilt) position in degrees."""
+    pan, tilt = ptu_service.get_position()
+    return {"pan": pan, "tilt": tilt}
+
+
+@router.get("/position/query")
+def query_position():
+    """Query PTU for actual position via H10E/H20E. Returns (pan, tilt) in degrees."""
+    success, pan, tilt = ptu_service.query_position()
+    if not success:
+        raise HTTPException(status_code=503, detail="PTU position query failed or timed out")
+    return {"pan": pan, "tilt": tilt}
+
+
 @router.post("/connect")
 def ptu_connect(body: ConnectBody):
     """Connect to PTU on the given serial port."""
@@ -45,8 +62,9 @@ def ptu_connect(body: ConnectBody):
 
 @router.post("/move/absolute")
 def move_absolute(body: MoveBody):
-    """Move PTU to absolute position (degrees)."""
-    success, message = ptu_service.move_absolute(body.pan, body.tilt)
+    """Move PTU to absolute position (degrees). Sends H51,azimuth_pulse,pitch_pulse,speedE."""
+    speed = body.speed if body.speed is not None else ptu_service.DEFAULT_SPEED_PTU
+    success, message = ptu_service.move_absolute(body.pan, body.tilt, speed)
     if not success:
         raise HTTPException(status_code=500, detail=message)
     return {"ok": True, "message": message}
@@ -54,8 +72,9 @@ def move_absolute(body: MoveBody):
 
 @router.post("/move/relative")
 def move_relative(body: MoveBody):
-    """Move PTU relative to current position (degrees)."""
-    success, message = ptu_service.move_relative(body.pan, body.tilt)
+    """Move PTU relative to current position (degrees). Sends H52,delta_az,delta_pt,speedE."""
+    speed = body.speed if body.speed is not None else ptu_service.DEFAULT_SPEED_PTU
+    success, message = ptu_service.move_relative(body.pan, body.tilt, speed)
     if not success:
         raise HTTPException(status_code=500, detail=message)
     return {"ok": True, "message": message}
