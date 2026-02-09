@@ -38,6 +38,11 @@ export interface DetectedBalloon {
     height: number;
   };
   isTarget: boolean;
+  // Optional 500ms-ahead prediction in pixel coordinates
+  predictedCenterX?: number | null;
+  predictedCenterY?: number | null;
+  // Detection confidence score
+  confidence?: number;
 }
 
 export interface LogEntry {

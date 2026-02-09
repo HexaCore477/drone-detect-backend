@@ -13,3 +13,4 @@ export {
   type ConnectPayload,
   type PtuConnectStatus,
 } from './ptu';
+export { getAutoTracking, setAutoTracking, type AutoTrackingConfig } from './config';
