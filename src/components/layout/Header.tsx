@@ -5,6 +5,7 @@ import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import type { ScenarioId, SystemStatus } from '@/types/tracking';
 import { Activity, Radio, Video, Crosshair } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { SkyLANXBranding } from '../tracking/SkyLANXBranding';
 
 interface HeaderProps {
   activeScenario: ScenarioId;
@@ -21,18 +22,9 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
       className
     )}>
       {/* Left: System Title */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Crosshair className="w-6 h-6 text-primary glow-green" />
-          <div>
-            <h1 className="text-lg font-bold text-primary glow-green tracking-wider">
-              {t('header.title')}
-            </h1>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
-              {t('header.subtitle')}
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center">
+          {/* <Crosshair className="w-6 h-6 text-primary glow-green" /> */}
+        <SkyLANXBranding /> 
       </div>
 
       {/* Center: Active Scenario */}
