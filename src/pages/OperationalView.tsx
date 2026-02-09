@@ -1,16 +1,32 @@
+import { useState, useEffect } from 'react';
 import { CameraView } from '@/components/tracking/CameraView';
-import { KalmanDisplay } from '@/components/tracking/KalmanDisplay';
 import { PTUControl } from '@/components/tracking/PTUControl';
 import { ScenarioSelector } from '@/components/tracking/ScenarioSelector';
-import { DataPanel, DataGrid, DataCell } from '@/components/ui/DataPanel';
+import { OperationModeSelector } from '@/components/tracking/OperationModeSelector';
+import { IndicatorPanels } from '@/components/tracking/IndicatorPanels';
+import { DataPanel, DataGrid, DataCell, DataRow } from '@/components/ui/DataPanel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { 
   DetectedBalloon, 
   PTUState, 
   KalmanState, 
   ScenarioId,
-  SystemStatus 
+  SystemStatus,
+  LaserStatus,
+  WaterCoolingStatus,
+  BatteryStatus,
+  EnvironmentStatus,
+  PlatformStatus,
+  OperationMode,
 } from '@/types/tracking';
+import {
+  DEFAULT_LASER_STATUS,
+  DEFAULT_WATER_COOLING,
+  DEFAULT_BATTERY,
+  DEFAULT_ENVIRONMENT,
+  DEFAULT_PLATFORM,
+  DEFAULT_OPERATION_MODE,
+} from '@/data/indicatorDefaults';
 import { useTranslation } from 'react-i18next';
 
 interface OperationalViewProps {
@@ -20,6 +36,14 @@ interface OperationalViewProps {
   activeScenario: ScenarioId;
   onScenarioChange: (id: ScenarioId) => void;
   systemStatus: SystemStatus;
+  ptuPan?: number | null;
+  ptuTilt?: number | null;
+  laserStatus?: LaserStatus;
+  waterCooling?: WaterCoolingStatus;
+  battery?: BatteryStatus;
+  environment?: EnvironmentStatus;
+  platform?: PlatformStatus;
+  operationMode?: OperationMode;
 }
 
 export function OperationalView({
@@ -29,8 +53,22 @@ export function OperationalView({
   activeScenario,
   onScenarioChange,
   systemStatus,
+  ptuPan = null,
+  ptuTilt = null,
+  laserStatus = DEFAULT_LASER_STATUS,
+  waterCooling = DEFAULT_WATER_COOLING,
+  battery = DEFAULT_BATTERY,
+  environment = DEFAULT_ENVIRONMENT,
+  platform = DEFAULT_PLATFORM,
+  operationMode: initialOperationMode = DEFAULT_OPERATION_MODE,
 }: OperationalViewProps) {
   const { t } = useTranslation();
+  const [operationMode, setOperationMode] = useState<OperationMode>(initialOperationMode);
+
+  // Sync state with prop changes
+  useEffect(() => {
+    setOperationMode(initialOperationMode);
+  }, [initialOperationMode]);
   
   return (
     <div className="h-full flex min-h-0">
@@ -43,7 +81,37 @@ export function OperationalView({
               onSelect={onScenarioChange} 
             />
 
-            <KalmanDisplay state={kalmanState} />
+            {/* Operation Mode */}
+            <OperationModeSelector
+              operationMode={operationMode}
+              onModeChange={setOperationMode}
+            />
+
+            {/* Environment */}
+            <DataPanel title={t('environment.title', 'Environment')} status="stable">
+              <div className="space-y-1 text-sm">
+                <DataRow label={t('environment.temp', 'Temperature')} value={environment.temperatureC.toFixed(1)} unit="°C" />
+                <DataRow label={t('environment.pressure', 'Air pressure')} value={environment.airPressureHpa} unit="hPa" />
+                <DataRow label={t('environment.humidity', 'Humidity')} value={environment.humidityPercent} unit="%" />
+                <DataRow label={t('environment.windSpeed', 'Wind speed')} value={environment.windSpeedMs.toFixed(1)} unit="m/s" />
+                <DataRow label={t('environment.windDir', 'Wind direction')} value={environment.windDirectionDeg} unit="°" />
+                <DataRow label={t('environment.weather', 'Conditions')} value={environment.weatherConditions} />
+              </div>
+            </DataPanel>
+
+            {/* Platform */}
+            <DataPanel title={t('platform.title', 'Platform')} status="stable">
+              <div className="space-y-1 text-sm">
+                <DataRow label={t('platform.roll', 'Roll')} value={platform.attitude.roll.toFixed(1)} unit="°" />
+                <DataRow label={t('platform.pitch', 'Pitch')} value={platform.attitude.pitch.toFixed(1)} unit="°" />
+                <DataRow label={t('platform.yaw', 'Yaw')} value={platform.attitude.yaw.toFixed(1)} unit="°" />
+                <DataRow label={t('platform.geo', 'Position')} value={platform.geoPosition} />
+                <DataRow
+                  label={t('platform.gps', 'GPS')}
+                  value={`${platform.gpsCoordinates.lat.toFixed(6)}, ${platform.gpsCoordinates.lon.toFixed(6)}`}
+                />
+              </div>
+            </DataPanel>
           </div>
         </ScrollArea>
       </div>
@@ -117,10 +185,15 @@ export function OperationalView({
       </div>
 
       {/* Right Panel */}
-      <div className="w-72 flex flex-col gap-3 p-3 border-l border-border bg-card/50 min-h-0">
+      <div className="w-80 flex flex-col gap-3 p-3 border-l border-border bg-card/50 min-h-0">
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col gap-3 pr-2">
             <PTUControl ptuState={ptuState} />
+            <IndicatorPanels
+              laserStatus={laserStatus}
+              waterCooling={waterCooling}
+              battery={battery}
+            />
           </div>
         </ScrollArea>
       </div>

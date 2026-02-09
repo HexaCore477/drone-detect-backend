@@ -69,3 +69,56 @@ export interface TrackingConfig {
   latencyS: number;
   useKalman: boolean;
 }
+
+export interface LaserStatus {
+  on: boolean;
+  powerPercent: number;
+  frequencyHz: number;
+}
+
+export interface WaterCoolingStatus {
+  on: boolean;
+  currentTempC: number;
+  thresholdTempC: number;
+}
+
+export interface BatteryStatus {
+  totalCapacityKwh: number;
+  currentPercent: number;
+  estimatedTimeToChargeMinutes: number;
+}
+
+export type OperationMode = 'human-in-the-loop' | 'human-on-the-loop' | 'human-out-of-the-loop';
+
+export interface EnvironmentStatus {
+  temperatureC: number;
+  airPressureHpa: number;
+  humidityPercent: number;
+  windSpeedMs: number;
+  windDirectionDeg: number;
+  weatherConditions: string;
+}
+
+export interface PlatformStatus {
+  attitude: {
+    roll: number;
+    pitch: number;
+    yaw: number;
+  };
+  geoPosition: string;
+  gpsCoordinates: {
+    lat: number;
+    lon: number;
+  };
+}
+
+export interface DroneData {
+  speed: number;
+  distance: number;
+  attitude: {
+    roll: number;
+    pitch: number;
+    yaw: number;
+  };
+  type: string;
+}

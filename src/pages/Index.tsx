@@ -26,7 +26,7 @@ const Index = () => {
   } = useSimulatedData(activeScenario);
 
   // Live detections from backend YOLO tracking WebSocket
-  const trackedBalloons = useBalloonTracking();
+  const { balloons: trackedBalloons, ptuPan, ptuTilt } = useBalloonTracking();
   const balloons = trackedBalloons;
 
   // Update time every second
@@ -96,6 +96,8 @@ const Index = () => {
             activeScenario={activeScenario}
             onScenarioChange={setActiveScenario}
             systemStatus={systemStatus}
+            ptuPan={ptuPan}
+            ptuTilt={ptuTilt}
           />
         ) : (
           <WaterfallView

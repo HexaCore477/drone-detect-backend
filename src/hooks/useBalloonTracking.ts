@@ -4,6 +4,8 @@ import type { DetectedBalloon } from '@/types/tracking';
 interface TrackingMessage {
   timestamp: number;
   balloons: DetectedBalloon[];
+  ptuPan?: number | null;
+  ptuTilt?: number | null;
 }
 
 const getDefaultTrackingWsUrl = () => {
@@ -15,6 +17,8 @@ const getDefaultTrackingWsUrl = () => {
 export function useBalloonTracking(wsUrl?: string) {
   const url = wsUrl ?? getDefaultTrackingWsUrl();
   const [balloons, setBalloons] = useState<DetectedBalloon[]>([]);
+  const [ptuPan, setPtuPan] = useState<number | null>(null);
+  const [ptuTilt, setPtuTilt] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -54,6 +58,12 @@ export function useBalloonTracking(wsUrl?: string) {
             }),
           });
           setBalloons(data.balloons);
+          if (typeof data.ptuPan === 'number') {
+            setPtuPan(data.ptuPan);
+          }
+          if (typeof data.ptuTilt === 'number') {
+            setPtuTilt(data.ptuTilt);
+          }
         } else {
           console.warn('[useBalloonTracking] Invalid balloons array, clearing');
           setBalloons([]);
@@ -84,6 +94,6 @@ export function useBalloonTracking(wsUrl?: string) {
     };
   }, [url]);
 
-  return balloons;
+  return { balloons, ptuPan, ptuTilt };
 }
 
