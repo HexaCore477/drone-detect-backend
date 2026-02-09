@@ -5,7 +5,8 @@ const getDefaultWsUrl = () => {
   if (envUrl) return envUrl;
   const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
   const port = import.meta.env.VITE_WS_STREAM_PORT ?? '8000';
-  return `ws://${host}:${port}/api/stream/ws`;
+  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${protocol}://${host}:${port}/api/stream/ws`;
 };
 
 export interface CameraStreamState {
