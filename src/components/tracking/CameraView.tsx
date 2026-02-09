@@ -148,7 +148,7 @@ export function CameraView({
                 top: `${scaleY(predY)}%`,
                 boxShadow: '0 0 8px rgba(34, 211, 238, 0.8)',
               }}
-              title={`${b.id} predicted (500ms)`}
+              title={t('camera.predicted', '{{id}} predicted (500ms)', { id: b.id })}
             />
           );
         })}

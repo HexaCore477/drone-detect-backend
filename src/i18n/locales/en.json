@@ -2,7 +2,8 @@
   "header": {
     "title": "Skylanx-Laser-CUAS-Sytem",
     "subtitle": "PTU Control Interface v1.0",
-    "latency": "Latency"
+    "latency": "Latency",
+    "branding": "SkyLANX - Laserbased C-UAS System SKL 2KW"
   },
   "tabs": {
     "operational": "OPERATIONAL",
@@ -45,13 +46,15 @@
     "manual": "MANUAL",
     "kf": "KF",
     "on": "ON",
-    "off": "OFF"
+    "off": "OFF",
+    "predicted": "{{id}} predicted (500ms)"
   },
   "ptu": {
     "title": "PTU STATUS",
     "control": "PTU CONTROL",
     "azimuth": "Azimuth",
     "pitch": "Pitch",
+    "angles": "PTU Angles",
     "actual": "Actual",
     "target": "TARGET",
     "error": "ERROR",
@@ -129,7 +132,9 @@
     "maxVelocity": "Max Velocity",
     "deadband": "Deadband",
     "latencyComp": "Latency Comp",
-    "accel": "Accel"
+    "accel": "Accel",
+    "latency": "Latency",
+    "latencyMs": "Round-trip"
   },
   "logs": {
     "title": "SYSTEM LOGS",
@@ -161,5 +166,53 @@
     "tiltOffset": "Tilt Offset",
     "focus": "Focus",
     "power": "Power"
+  },
+  "mode": {
+    "title": "OPERATION MODE",
+    "humanInTheLoop": "Human-in-the-Loop",
+    "humanOnTheLoop": "Human-on-the-Loop",
+    "humanOutOfTheLoop": "Human-out-of-the-Loop",
+    "hitl": "HITL",
+    "hotl": "HOTL",
+    "hool": "HOOL"
+  },
+  "laser": {
+    "title": "Laser",
+    "status": "Status",
+    "on": "On",
+    "off": "Off",
+    "power": "Power",
+    "frequency": "Frequency"
+  },
+  "cooling": {
+    "title": "Water Cooling",
+    "status": "Status",
+    "on": "On",
+    "off": "Off",
+    "temp": "Current",
+    "threshold": "Threshold"
+  },
+  "battery": {
+    "title": "Battery",
+    "capacity": "Capacity",
+    "percent": "Charge",
+    "chargeTime": "Est. charge time"
+  },
+  "environment": {
+    "title": "Environment",
+    "temp": "Temperature",
+    "pressure": "Air pressure",
+    "humidity": "Humidity",
+    "windSpeed": "Wind speed",
+    "windDir": "Wind direction",
+    "weather": "Conditions"
+  },
+  "platform": {
+    "title": "Platform",
+    "roll": "Roll",
+    "pitch": "Pitch",
+    "yaw": "Yaw",
+    "geo": "Position",
+    "gps": "GPS"
   }
 }

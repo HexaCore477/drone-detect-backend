@@ -32,45 +32,6 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
 
       {/* Right: System Status */}
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-muted-foreground" />
-            <StatusIndicator 
-              status={systemStatus.connected ? 'online' : 'offline'} 
-              label={t('status.sys')} 
-              size="sm" 
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Video className="w-4 h-4 text-muted-foreground" />
-            <StatusIndicator 
-              status={systemStatus.cameraOnline ? 'online' : 'offline'} 
-              label={t('status.cam')} 
-              size="sm" 
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-muted-foreground" />
-            <StatusIndicator 
-              status={systemStatus.ptuOnline ? 'online' : 'offline'} 
-              label={t('status.ptu')} 
-              size="sm" 
-            />
-          </div>
-        </div>
-
-        {/* Latency Display */}
-        <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 rounded">
-          <span className="text-[10px] text-muted-foreground uppercase">{t('header.latency')}</span>
-          <span className={cn(
-            'font-mono text-sm font-bold',
-            systemStatus.latencyMs < 100 ? 'text-tactical-green' : 
-            systemStatus.latencyMs < 200 ? 'text-tactical-amber' : 'text-tactical-red'
-          )}>
-            {systemStatus.latencyMs}ms
-          </span>
-        </div>
-
         {/* Language Switcher */}
         <LanguageSwitcher />
 
