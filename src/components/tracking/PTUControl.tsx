@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { DataPanel, DataRow } from '@/components/ui/DataPanel';
+import { useCallback, useEffect, useState } from 'react';
+import { getPtuPorts, getPtuConnectStatus, ptuDirection, ptuConnect, ptuDisconnect, getAutoTracking, setAutoTracking } from '@/api';
+import { DataPanel } from '@/components/ui/DataPanel';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 import {
   Select,
   SelectContent,
@@ -18,6 +20,7 @@ import {
   Pause,
   Plug,
   PlugZap,
+  RefreshCw,
   Settings,
   ArrowUpLeft,
   ArrowUpRight,
@@ -33,24 +36,132 @@ interface PTUControlProps {
   className?: string;
 }
 
+const baudRates = ['9600', '19200', '38400', '57600', '115200'];
+
 export function PTUControl({ ptuState, className }: PTUControlProps) {
   const { t } = useTranslation();
-  const [serialPort, setSerialPort] = useState<string>('COM3');
+  const { toast } = useToast();
+  const [serialPorts, setSerialPorts] = useState<string[]>([]);
+  const [serialPort, setSerialPort] = useState<string>('');
   const [baudRate, setBaudRate] = useState<string>('9600');
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [isAutoTracking, setIsAutoTracking] = useState<boolean>(true);
+  const [isAutoTracking, setIsAutoTracking] = useState<boolean>(false);
+  const [portsLoading, setPortsLoading] = useState<boolean>(false);
 
-  // Common serial port names
-  const serialPorts = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8'];
-  const baudRates = ['9600', '19200', '38400', '57600', '115200'];
+  // On initial mount / page refresh, query backend connection status and auto-tracking config
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [status, config] = await Promise.all([
+          getPtuConnectStatus(),
+          getAutoTracking(),
+        ]);
+        if (!cancelled) {
+          setIsConnected(status.connected);
+          setIsAutoTracking(config.is_auto_tracking);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch initial state:', err);
+        if (!cancelled) {
+          setIsConnected(false);
+          setIsAutoTracking(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const handleConnect = () => {
-    setIsConnected(!isConnected);
+  const fetchPorts = useCallback(async () => {
+    setPortsLoading(true);
+    try {
+      const ports = await getPtuPorts();
+      setSerialPorts(ports);
+      setSerialPort((prev) => (ports.length > 0 && !prev ? ports[0] : prev));
+    } catch (err) {
+      console.warn('Failed to fetch serial ports:', err);
+      setSerialPorts([]);
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.fetchPorts'),
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setPortsLoading(false);
+    }
+  }, [t, toast]);
+
+  useEffect(() => {
+    fetchPorts();
+  }, [fetchPorts]);
+
+  const handleConnect = async () => {
+    if (isConnected) {
+      try {
+        await ptuDisconnect();
+        setIsConnected(false);
+        toast({
+          variant: 'default',
+          title: t('ptu.success.disconnected'),
+          description: t('ptu.success.disconnectedDesc'),
+        });
+      } catch (err) {
+        console.error('PTU disconnect failed:', err);
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.disconnect'),
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else {
+      if (!serialPort || serialPort === '_empty') {
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.noPort'),
+          description: t('ptu.error.noPortDesc'),
+        });
+        return;
+      }
+      try {
+        await ptuConnect({ port: serialPort, baud: parseInt(baudRate, 10) });
+        setIsConnected(true);
+        toast({
+          variant: 'default',
+          title: t('ptu.success.connected'),
+          description: `${t('ptu.success.connectedDesc')} ${serialPort} @ ${baudRate} baud`,
+        });
+      } catch (err) {
+        console.error('PTU connect failed:', err);
+        toast({
+          variant: 'destructive',
+          title: t('ptu.error.connect'),
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   };
 
-  const handleControl = (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
-    if (!isConnected) return;
-    console.log(`PTU Control: ${direction}`);
+  const handleControl = async (direction: 'left' | 'right' | 'up' | 'down' | 'pause' | 'left-up' | 'left-down' | 'right-up' | 'right-down') => {
+    if (!isConnected) {
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.notConnected'),
+        description: t('ptu.error.notConnectedDesc'),
+      });
+      return;
+    }
+    try {
+      await ptuDirection(direction);
+    } catch (err) {
+      console.error('PTU direction failed:', err);
+      toast({
+        variant: 'destructive',
+        title: t('ptu.error.direction'),
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   return (
@@ -73,19 +184,42 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           {/* Serial Port Name and Baud Rate - One Line */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                {t('ptu.serialPort')}
-              </Label>
-              <Select value={serialPort} onValueChange={setSerialPort} disabled={isConnected}>
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  {t('ptu.serialPort')}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={fetchPorts}
+                  disabled={portsLoading || isConnected}
+                  title={t('ptu.refreshPorts')}
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', portsLoading && 'animate-spin')} />
+                </Button>
+              </div>
+              <Select
+                value={serialPorts.length === 0 ? '_empty' : serialPort || serialPorts[0]}
+                onValueChange={(v) => v !== '_empty' && setSerialPort(v)}
+                disabled={isConnected || portsLoading}
+              >
                 <SelectTrigger className="h-8 text-xs font-mono">
-                  <SelectValue />
+                  <SelectValue placeholder={portsLoading ? t('ptu.loadingPorts') : t('ptu.selectPort')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {serialPorts.map((port) => (
-                    <SelectItem key={port} value={port} className="font-mono">
-                      {port}
+                  {serialPorts.length === 0 && !portsLoading ? (
+                    <SelectItem value="_empty" className="font-mono text-muted-foreground" disabled>
+                      {t('ptu.noPorts')}
                     </SelectItem>
-                  ))}
+                  ) : (
+                    serialPorts.map((port) => (
+                      <SelectItem key={port} value={port} className="font-mono">
+                        {port}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -163,7 +297,22 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
             <Checkbox
               id="auto-tracking"
               checked={isAutoTracking}
-              onCheckedChange={(checked) => setIsAutoTracking(checked === true)}
+              onCheckedChange={async (checked) => {
+                const newValue = checked === true;
+                setIsAutoTracking(newValue);
+                try {
+                  await setAutoTracking(newValue);
+                } catch (err) {
+                  console.error('Failed to save auto-tracking config:', err);
+                  toast({
+                    variant: 'destructive',
+                    title: t('ptu.error.direction'),
+                    description: err instanceof Error ? err.message : 'Failed to save config',
+                  });
+                  // Revert on error
+                  setIsAutoTracking(!newValue);
+                }
+              }}
               disabled={!isConnected}
               className="border-primary data-[state=checked]:bg-primary"
             />

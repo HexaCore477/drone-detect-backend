@@ -3,6 +3,7 @@ import { Header } from '@/components/layout/Header';
 import { OperationalView } from '@/pages/OperationalView';
 import { WaterfallView } from '@/pages/WaterfallView';
 import { useSimulatedData } from '@/hooks/useSimulatedData';
+import { useBalloonTracking } from '@/hooks/useBalloonTracking';
 import type { ScenarioId } from '@/types/tracking';
 import { cn } from '@/lib/utils';
 import { Monitor, Activity } from 'lucide-react';
@@ -17,12 +18,16 @@ const Index = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   
   const { 
-    balloons, 
+    balloons: simulatedBalloons, 
     ptuState, 
     kalmanState, 
     logs, 
     systemStatus 
   } = useSimulatedData(activeScenario);
+
+  // Live detections from backend YOLO tracking WebSocket
+  const trackedBalloons = useBalloonTracking();
+  const balloons = trackedBalloons;
 
   // Update time every second
   useEffect(() => {

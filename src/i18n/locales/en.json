@@ -1,6 +1,6 @@
 {
   "header": {
-    "title": "BALLOON TRACKING SYSTEM",
+    "title": "Skylanx-Laser-CUAS-Sytem",
     "subtitle": "PTU Control Interface v1.0",
     "latency": "Latency"
   },
@@ -35,6 +35,9 @@
   "camera": {
     "title": "CAMERA FEED",
     "feed": "CAMERA FEED",
+    "connecting": "Connecting...",
+    "waitingFrame": "Waiting for first frame...",
+    "retry": "Retry",
     "trackingActive": "Tracking Active",
     "trackingIdle": "Tracking Idle",
     "mode": "MODE",
@@ -53,6 +56,10 @@
     "target": "TARGET",
     "error": "ERROR",
     "serialPort": "Serial Port",
+    "loadingPorts": "Loading...",
+    "selectPort": "Select port",
+    "noPorts": "No ports found",
+    "refreshPorts": "Refresh",
     "baudRate": "Baud Rate",
     "serialConnection": "Serial Port Connection",
     "connect": "Connect",
@@ -60,7 +67,23 @@
     "controlSection": "Control",
     "autoTracking": "Automatic Object Tracking",
     "manualControl": "Manual Control",
-    "active": "(Active)"
+    "active": "(Active)",
+    "error": {
+      "fetchPorts": "Failed to fetch serial ports",
+      "connect": "Connection failed",
+      "disconnect": "Disconnect failed",
+      "direction": "PTU command failed",
+      "noPort": "No port selected",
+      "noPortDesc": "Please select a serial port before connecting",
+      "notConnected": "Not connected",
+      "notConnectedDesc": "Please connect to PTU before sending commands"
+    },
+    "success": {
+      "connected": "Connected",
+      "connectedDesc": "Successfully connected to PTU on",
+      "disconnected": "Disconnected",
+      "disconnectedDesc": "PTU connection closed"
+    }
   },
   "kalman": {
     "title": "KALMAN FILTER",

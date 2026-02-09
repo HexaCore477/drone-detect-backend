@@ -35,6 +35,9 @@
   "camera": {
     "title": "KAMERABILD",
     "feed": "KAMERABILD",
+    "connecting": "Verbinden...",
+    "waitingFrame": "Warte auf erstes Bild...",
+    "retry": "Erneut versuchen",
     "trackingActive": "Verfolgung Aktiv",
     "trackingIdle": "Verfolgung Inaktiv",
     "mode": "MODUS",
@@ -53,6 +56,10 @@
     "target": "ZIEL",
     "error": "FEHLER",
     "serialPort": "Serieller Port",
+    "loadingPorts": "Laden...",
+    "selectPort": "Port wählen",
+    "noPorts": "Keine Ports gefunden",
+    "refreshPorts": "Aktualisieren",
     "baudRate": "Baudrate",
     "serialConnection": "Serielle Verbindung",
     "connect": "Verbinden",
@@ -60,7 +67,23 @@
     "controlSection": "Steuerung",
     "autoTracking": "Automatische Objektverfolgung",
     "manualControl": "Manuelle Steuerung",
-    "active": "(Aktiv)"
+    "active": "(Aktiv)",
+    "error": {
+      "fetchPorts": "Serielle Ports konnten nicht abgerufen werden",
+      "connect": "Verbindung fehlgeschlagen",
+      "disconnect": "Trennung fehlgeschlagen",
+      "direction": "PTU-Befehl fehlgeschlagen",
+      "noPort": "Kein Port ausgewählt",
+      "noPortDesc": "Bitte wählen Sie einen seriellen Port aus, bevor Sie sich verbinden",
+      "notConnected": "Nicht verbunden",
+      "notConnectedDesc": "Bitte verbinden Sie sich mit dem PTU, bevor Sie Befehle senden"
+    },
+    "success": {
+      "connected": "Verbunden",
+      "connectedDesc": "Erfolgreich mit PTU auf verbunden",
+      "disconnected": "Getrennt",
+      "disconnectedDesc": "PTU-Verbindung geschlossen"
+    }
   },
   "kalman": {
     "title": "KALMAN-FILTER",
