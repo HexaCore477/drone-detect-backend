@@ -4,6 +4,7 @@ import { OperationalView } from '@/pages/OperationalView';
 import { WaterfallView } from '@/pages/WaterfallView';
 import { useSimulatedData } from '@/hooks/useSimulatedData';
 import { useBalloonTracking } from '@/hooks/useBalloonTracking';
+import { useOperationalTelemetry } from '@/hooks/useOperationalTelemetry';
 import type { ScenarioId } from '@/types/tracking';
 import { cn } from '@/lib/utils';
 import { Monitor, Activity } from 'lucide-react';
@@ -24,6 +25,9 @@ const Index = () => {
     logs, 
     systemStatus 
   } = useSimulatedData(activeScenario);
+
+  // Operational telemetry (laser, cooling, battery, environment, platform)
+  const { telemetry, setOperationMode } = useOperationalTelemetry();
 
   // Live detections from backend YOLO tracking WebSocket
   const trackedBalloons = useBalloonTracking();
@@ -96,6 +100,8 @@ const Index = () => {
             activeScenario={activeScenario}
             onScenarioChange={setActiveScenario}
             systemStatus={systemStatus}
+            telemetry={telemetry}
+            onOperationModeChange={setOperationMode}
           />
         ) : (
           <WaterfallView
