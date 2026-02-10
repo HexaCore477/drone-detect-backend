@@ -63,6 +63,7 @@
     "selectPort": "Select port",
     "noPorts": "No ports found",
     "refreshPorts": "Refresh",
+    "refreshPosition": "Refresh position",
     "baudRate": "Baud Rate",
     "serialConnection": "Serial Port Connection",
     "connect": "Connect",

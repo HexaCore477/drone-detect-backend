@@ -63,6 +63,7 @@
     "selectPort": "Port wählen",
     "noPorts": "Keine Ports gefunden",
     "refreshPorts": "Aktualisieren",
+    "refreshPosition": "Position aktualisieren",
     "baudRate": "Baudrate",
     "serialConnection": "Serielle Verbindung",
     "connect": "Verbinden",

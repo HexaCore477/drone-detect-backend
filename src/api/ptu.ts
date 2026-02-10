@@ -74,3 +74,25 @@ export async function getPtuConnectStatus(): Promise<PtuConnectStatus> {
   const data = await res.json();
   return { connected: Boolean(data.connected) };
 }
+
+export interface PtuPosition {
+  pan: number;
+  tilt: number;
+}
+
+/** Query PTU for actual position (H10E/H20E). On 503 falls back to cached position. */
+export async function queryPtuPosition(): Promise<PtuPosition> {
+  const res = await fetch(apiUrl('/ptu/position/query'));
+  if (res.ok) {
+    const data = await res.json();
+    return { pan: Number(data.pan), tilt: Number(data.tilt) };
+  }
+  if (res.status === 503) {
+    const cached = await fetch(apiUrl('/ptu/position/cached'));
+    if (cached.ok) {
+      const data = await cached.json();
+      return { pan: Number(data.pan), tilt: Number(data.tilt) };
+    }
+  }
+  throw new Error(`PTU position query failed: ${res.statusText}`);
+}

@@ -28,6 +28,7 @@ import {
   DEFAULT_OPERATION_MODE,
 } from '@/data/indicatorDefaults';
 import { useTranslation } from 'react-i18next';
+import { queryPtuPosition } from '@/api';
 
 interface OperationalViewProps {
   balloons: DetectedBalloon[];
@@ -64,12 +65,47 @@ export function OperationalView({
 }: OperationalViewProps) {
   const { t } = useTranslation();
   const [operationMode, setOperationMode] = useState<OperationMode>(initialOperationMode);
+  const [queriedPan, setQueriedPan] = useState<number | null>(null);
+  const [queriedTilt, setQueriedTilt] = useState<number | null>(null);
+
+  const effectivePtuState: PTUState = {
+    ...ptuState,
+    panActual: queriedPan ?? ptuPan ?? ptuState.panActual,
+    tiltActual: queriedTilt ?? ptuTilt ?? ptuState.tiltActual,
+  };
+
+  const handleRefreshPtuPosition = async () => {
+    try {
+      const { pan, tilt } = await queryPtuPosition();
+      setQueriedPan(pan);
+      setQueriedTilt(tilt);
+    } catch (e) {
+      console.warn('PTU position query failed:', e);
+    }
+  };
 
   // Sync state with prop changes
   useEffect(() => {
     setOperationMode(initialOperationMode);
   }, [initialOperationMode]);
-  
+
+  // On page load, query PTU position and update azimuth/pitch
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { pan, tilt } = await queryPtuPosition();
+        if (!cancelled) {
+          setQueriedPan(pan);
+          setQueriedTilt(tilt);
+        }
+      } catch (e) {
+        if (!cancelled) console.warn('PTU position query on load failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="h-full flex min-h-0">
       {/* Left Panel */}
@@ -188,7 +224,7 @@ export function OperationalView({
       <div className="w-80 flex flex-col gap-3 p-3 border-l border-border bg-card/50 min-h-0">
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col gap-3 pr-2">
-            <PTUControl ptuState={ptuState} />
+            <PTUControl ptuState={effectivePtuState} onRefreshPosition={handleRefreshPtuPosition} />
             <IndicatorPanels
               laserStatus={laserStatus}
               waterCooling={waterCooling}
