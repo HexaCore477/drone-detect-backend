@@ -11,7 +11,8 @@ interface TrackingMessage {
 const getDefaultTrackingWsUrl = () => {
   const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
   const port = import.meta.env.VITE_WS_STREAM_PORT ?? '8000';
-  return `ws://${host}:${port}/api/tracking/ws`;
+  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${protocol}://${host}:${port}/api/tracking/ws`;
 };
 
 export function useBalloonTracking(wsUrl?: string) {
