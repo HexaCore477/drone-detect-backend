@@ -34,11 +34,13 @@ import { useTranslation } from 'react-i18next';
 interface PTUControlProps {
   ptuState?: PTUState;
   className?: string;
+  /** Called when refresh button is clicked to fetch PTU position and update azimuth/pitch */
+  onRefreshPosition?: () => void | Promise<void>;
 }
 
 const baudRates = ['9600', '19200', '38400', '57600', '115200'];
 
-export function PTUControl({ ptuState, className }: PTUControlProps) {
+export function PTUControl({ ptuState, className, onRefreshPosition }: PTUControlProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [serialPorts, setSerialPorts] = useState<string[]>([]);
@@ -47,6 +49,7 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isAutoTracking, setIsAutoTracking] = useState<boolean>(false);
   const [portsLoading, setPortsLoading] = useState<boolean>(false);
+  const [positionRefreshing, setPositionRefreshing] = useState<boolean>(false);
 
   // On initial mount / page refresh, query backend connection status and auto-tracking config
   useEffect(() => {
@@ -468,14 +471,33 @@ export function PTUControl({ ptuState, className }: PTUControlProps) {
           {/* Azimuth & Pitch Values */}
           {ptuState && (
             <div className="pt-2 border-t border-border/50">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-muted/20 p-2 rounded border border-border/50">
+              <div className="flex items-stretch gap-2">
+                <div className="flex-1 bg-muted/20 p-2 rounded border border-border/50">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t('ptu.azimuth')}</div>
                   <div className="font-mono text-lg font-bold text-tactical-cyan">
                     {ptuState.panActual.toFixed(2)}°
                   </div>
                 </div>
-                <div className="bg-muted/20 p-2 rounded border border-border/50">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 self-center h-9 w-9 border-primary/50"
+                  onClick={async () => {
+                    if (!onRefreshPosition) return;
+                    setPositionRefreshing(true);
+                    try {
+                      await onRefreshPosition();
+                    } finally {
+                      setPositionRefreshing(false);
+                    }
+                  }}
+                  disabled={positionRefreshing}
+                  title={t('ptu.refreshPosition')}
+                >
+                  <RefreshCw className={cn('h-4 w-4', positionRefreshing && 'animate-spin')} />
+                </Button>
+                <div className="flex-1 bg-muted/20 p-2 rounded border border-border/50">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t('ptu.pitch')}</div>
                   <div className="font-mono text-lg font-bold text-tactical-cyan">
                     {ptuState.tiltActual.toFixed(2)}°
