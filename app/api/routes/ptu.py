@@ -34,13 +34,11 @@ def connect_status():
     """Return whether PTU is currently connected."""
     return {"connected": ptu_service.is_connected()}
 
-
-@router.get("/position")
-def get_position():
+@router.get("/position/cached")
+def get_cached_position():
     """Return cached (pan, tilt) position in degrees."""
     pan, tilt = ptu_service.get_position()
     return {"pan": pan, "tilt": tilt}
-
 
 @router.get("/position/query")
 def query_position():
