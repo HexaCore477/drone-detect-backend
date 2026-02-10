@@ -120,8 +120,6 @@ def _serial_worker() -> None:
                         pt_pulse = _degrees_to_pulse(tilt_deg)
                         payload = f"H51,{az_pulse},{pt_pulse},{speed}E".encode("ascii")
                         _send_and_flush(payload)
-                        _current_pan = pan_deg
-                        _current_tilt = tilt_deg
                         logger.debug("PTU move absolute: pan=%.2f°, tilt=%.2f° (%d, %d pulses)", pan_deg, tilt_deg, az_pulse, pt_pulse)
                     elif cmd[0] == "move_relative":
                         _, pan_delta, tilt_delta, speed = cmd
@@ -129,12 +127,6 @@ def _serial_worker() -> None:
                         d_pt = _degrees_to_pulse(tilt_delta)
                         payload = f"H52,{d_az},{d_pt},{speed}E".encode("ascii")
                         _send_and_flush(payload)
-                        _current_pan += pan_delta
-                        _current_tilt += tilt_delta
-                        logger.debug(
-                            "PTU move relative: Δpan=%.2f°, Δtilt=%.2f° (%d, %d pulses) -> pan=%.2f°, tilt=%.2f°",
-                            pan_delta, tilt_delta, d_az, d_pt, _current_pan, _current_tilt,
-                        )
                     elif cmd[0] == "query_position":
                         result_queue = cmd[1]
                         az_pulse = _query_pulse(b"H10E")
@@ -191,10 +183,6 @@ def move_absolute(pan: float, tilt: float, speed: int = DEFAULT_SPEED_PTU) -> tu
     try:
         if _connected_port:
             _enqueue(("move_absolute", pan, tilt, speed))
-        else:
-            global _current_pan, _current_tilt
-            _current_pan = pan
-            _current_tilt = tilt
         return True, "OK"
     except Exception as e:
         logger.error("PTU move absolute failed: %s", e)
@@ -210,32 +198,30 @@ def move_relative(pan_delta: float, tilt_delta: float, speed: int = DEFAULT_SPEE
     try:
         if _connected_port:
             _enqueue(("move_relative", pan_delta, tilt_delta, speed))
-        else:
-            global _current_pan, _current_tilt
-            _current_pan += pan_delta
-            _current_tilt += tilt_delta
         return True, "OK"
     except Exception as e:
         logger.error("PTU move relative failed: %s", e)
         return False, str(e)
 
-
 def get_position() -> tuple[float, float]:
     """Return cached (pan, tilt) position in degrees."""
     return _current_pan, _current_tilt
-
 
 def query_position() -> tuple[bool, float, float]:
     """
     Query PTU for actual position via H10E (azimuth) and H20E (pitch).
     Returns (success, pan_deg, tilt_deg). Blocks until response or timeout.
+    Updates _current_pan and _current_tilt with the returned values.
     """
+    global _current_pan, _current_tilt
     if not _connected_port or _serial is None or not _serial.is_open:
         return False, _current_pan, _current_tilt
     result_queue: queue.Queue = queue.Queue(maxsize=1)
     _command_queue.put(("query_position", result_queue))
     try:
         pan, tilt = result_queue.get(timeout=2.0)
+        _current_pan = pan
+        _current_tilt = tilt
         return True, pan, tilt
     except queue.Empty:
         logger.warning("PTU query_position timeout")
