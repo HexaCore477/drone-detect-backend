@@ -2,7 +2,8 @@
   "header": {
     "title": "BALLON-VERFOLGUNGSSYSTEM",
     "subtitle": "PTU-Steuerungsschnittstelle v1.0",
-    "latency": "Latenz"
+    "latency": "Latenz",
+    "branding": "SkyLANX - Laserbasiertes C-UAS-System SKL 2KW"
   },
   "tabs": {
     "operational": "BETRIEB",
@@ -45,13 +46,15 @@
     "manual": "MANUELL",
     "kf": "KF",
     "on": "AN",
-    "off": "AUS"
+    "off": "AUS",
+    "predicted": "{{id}} vorhergesagt (500ms)"
   },
   "ptu": {
     "title": "PTU-STATUS",
     "control": "PTU-STEUERUNG",
     "azimuth": "Azimut",
     "pitch": "Neigung",
+    "angles": "PTU-Winkel",
     "actual": "Aktuell",
     "target": "ZIEL",
     "error": "FEHLER",
@@ -129,7 +132,9 @@
     "maxVelocity": "Max. Geschw.",
     "deadband": "Totzone",
     "latencyComp": "Latenzkompensation",
-    "accel": "Beschl."
+    "accel": "Beschl.",
+    "latency": "Latenz",
+    "latencyMs": "Round-trip"
   },
   "logs": {
     "title": "SYSTEMPROTOKOLLE",
@@ -161,5 +166,53 @@
     "tiltOffset": "Tilt-Offset",
     "focus": "Fokus",
     "power": "Leistung"
+  },
+  "mode": {
+    "title": "BETRIEBSMODUS",
+    "humanInTheLoop": "Mensch-im-Kreis",
+    "humanOnTheLoop": "Mensch-auf-dem-Kreis",
+    "humanOutOfTheLoop": "Mensch-außerhalb-des-Kreises",
+    "hitl": "HITL",
+    "hotl": "HOTL",
+    "hool": "HOOL"
+  },
+  "laser": {
+    "title": "Laser",
+    "status": "Status",
+    "on": "An",
+    "off": "Aus",
+    "power": "Leistung",
+    "frequency": "Frequenz"
+  },
+  "cooling": {
+    "title": "Wasserkühlung",
+    "status": "Status",
+    "on": "An",
+    "off": "Aus",
+    "temp": "Aktuell",
+    "threshold": "Schwellenwert"
+  },
+  "battery": {
+    "title": "Batterie",
+    "capacity": "Kapazität",
+    "percent": "Ladung",
+    "chargeTime": "Geschätzte Ladezeit"
+  },
+  "environment": {
+    "title": "Umgebung",
+    "temp": "Temperatur",
+    "pressure": "Luftdruck",
+    "humidity": "Luftfeuchtigkeit",
+    "windSpeed": "Windgeschwindigkeit",
+    "windDir": "Windrichtung",
+    "weather": "Bedingungen"
+  },
+  "platform": {
+    "title": "Plattform",
+    "roll": "Rollen",
+    "pitch": "Nicken",
+    "yaw": "Gieren",
+    "geo": "Position",
+    "gps": "GPS"
   }
 }

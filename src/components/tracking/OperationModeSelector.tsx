@@ -8,16 +8,22 @@ interface OperationModeSelectorProps {
   className?: string;
 }
 
-const modeAbbreviation: Record<OperationMode, string> = {
-  'human-in-the-loop': 'HITL',
-  'human-on-the-loop': 'HOTL',
-  'human-out-of-the-loop': 'HOOL',
+const getModeAbbreviation = (mode: OperationMode, t: (key: string) => string): string => {
+  const abbreviations: Record<OperationMode, string> = {
+    'human-in-the-loop': t('mode.hitl'),
+    'human-on-the-loop': t('mode.hotl'),
+    'human-out-of-the-loop': t('mode.hool'),
+  };
+  return abbreviations[mode];
 };
 
-const modeLabel: Record<OperationMode, string> = {
-  'human-in-the-loop': 'Human-in-the-Loop',
-  'human-on-the-loop': 'Human-on-the-Loop',
-  'human-out-of-the-loop': 'Human-out-of-the-Loop',
+const getModeLabel = (mode: OperationMode, t: (key: string) => string): string => {
+  const labels: Record<OperationMode, string> = {
+    'human-in-the-loop': t('mode.humanInTheLoop'),
+    'human-on-the-loop': t('mode.humanOnTheLoop'),
+    'human-out-of-the-loop': t('mode.humanOutOfTheLoop'),
+  };
+  return labels[mode];
 };
 
 const modeOptions: OperationMode[] = [
@@ -48,11 +54,11 @@ export function OperationModeSelector({
         <div className="flex flex-col items-center justify-center mb-6 space-y-2">
           {/* Large Abbreviation */}
           <div className="font-mono text-4xl font-bold text-primary glow-green">
-            {modeAbbreviation[operationMode]}
+            {getModeAbbreviation(operationMode, t)}
           </div>
           {/* Full Description */}
           <div className="text-sm text-muted-foreground font-sans">
-            {modeLabel[operationMode]}
+            {getModeLabel(operationMode, t)}
           </div>
         </div>
 
@@ -72,7 +78,7 @@ export function OperationModeSelector({
                     : 'bg-transparent text-primary border-primary hover:bg-primary/10'
                 )}
               >
-                {modeAbbreviation[mode]}
+                {getModeAbbreviation(mode, t)}
               </button>
             );
           })}
