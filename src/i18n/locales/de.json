@@ -214,5 +214,53 @@
     "yaw": "Gieren",
     "geo": "Position",
     "gps": "GPS"
+  },
+  "systemControl": {
+    "laserState": "Laserzustand",
+    "laser": {
+      "enabled": "Aktiviert",
+      "interlock": "Verriegelung",
+      "temp": "Temperatur",
+      "alarms": "Alarme"
+    },
+    "cooling": {
+      "onOff": "Ein/Aus",
+      "currentTemp": "Aktuelle Temp",
+      "alarm": "Alarm"
+    },
+    "battery": {
+      "alarms": "Alarme"
+    },
+    "prediction": "Vorhersagezustand",
+    "latency": "Latenzkompensation",
+    "ptuState": "PTU-Zustand",
+    "ptu": {
+      "limits": "Grenzen",
+      "faults": "Fehler"
+    },
+    "camera": "Kamerazustand",
+    "camera.zoom": "Zoom",
+    "camera.focus": "Fokus",
+    "camera.auto": "Auto",
+    "camera.link": "Videolink",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "switchOn": "Einschalten",
+    "switchOff": "Ausschalten",
+    "ok": "OK",
+    "open": "Offen",
+    "setOpen": "Auf Offen setzen",
+    "setOk": "Auf OK setzen",
+    "yes": "Ja",
+    "no": "Nein",
+    "none": "Keine",
+    "alarm": "Hohe Temperatur",
+    "clearAlarm": "Alarm löschen",
+    "raiseAlarm": "Alarm auslösen",
+    "lowBattery": "Niedriger Batteriestand",
+    "nominal": "Nominal",
+    "offline": "Offline",
+    "clearFault": "Fehler löschen",
+    "raiseFault": "Fehler auslösen"
   }
 }

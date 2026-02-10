@@ -214,5 +214,53 @@
     "yaw": "Yaw",
     "geo": "Position",
     "gps": "GPS"
+  },
+  "systemControl": {
+    "laserState": "Laser State",
+    "laser": {
+      "enabled": "Enabled",
+      "interlock": "Interlock",
+      "temp": "Temperature",
+      "alarms": "Alarms"
+    },
+    "cooling": {
+      "onOff": "On/Off",
+      "currentTemp": "Current Temp",
+      "alarm": "Alarm"
+    },
+    "battery": {
+      "alarms": "Alarms"
+    },
+    "prediction": "Prediction State",
+    "latency": "Latency Compensation",
+    "ptuState": "PTU State",
+    "ptu": {
+      "limits": "Limits",
+      "faults": "Faults"
+    },
+    "camera": "Camera State",
+    "camera.zoom": "Zoom",
+    "camera.focus": "Focus",
+    "camera.auto": "Auto",
+    "camera.link": "Video Link",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "switchOn": "Set ON",
+    "switchOff": "Set OFF",
+    "ok": "OK",
+    "open": "Open",
+    "setOpen": "Set Open",
+    "setOk": "Set OK",
+    "yes": "Yes",
+    "no": "No",
+    "none": "None",
+    "alarm": "High Temp",
+    "clearAlarm": "Clear Alarm",
+    "raiseAlarm": "Raise Alarm",
+    "lowBattery": "Low Battery",
+    "nominal": "Nominal",
+    "offline": "Offline",
+    "clearFault": "Clear Fault",
+    "raiseFault": "Raise Fault"
   }
 }
