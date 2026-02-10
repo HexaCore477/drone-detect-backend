@@ -32,7 +32,7 @@ export function SystemControlView({
   batteryStatus,
 }: SystemControlViewProps) {
   return (
-    <div className="h-full p-4 grid grid-cols-3 gap-4">
+    <div className="p-4 grid grid-cols-3 gap-4">
       <LaserStatePanel laserStatus={laserStatus} coolingStatus={coolingStatus} />
       <CoolingSystemPanel coolingStatus={coolingStatus} />
       <BatteryPanel batteryStatus={batteryStatus} />

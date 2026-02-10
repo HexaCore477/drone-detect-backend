@@ -101,7 +101,7 @@ const Index = () => {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden min-h-0">
+      <main className="flex-1 min-h-0 overflow-hidden">
         {viewMode === 'operational' && (
           <OperationalView
             balloons={balloons}
@@ -122,14 +122,16 @@ const Index = () => {
           />
         )}
         {viewMode === 'systemControl' && (
-          <SystemControlView
-            systemStatus={systemStatus}
-            ptuState={ptuState}
-            kalmanState={kalmanState}
-            laserStatus={{ on: true, powerPercent: 65, frequencyHz: 5 }}
-            coolingStatus={{ on: true, currentTempC: 28.5, thresholdTempC: 45 }}
-            batteryStatus={{ totalCapacityKwh: 25.6, currentPercent: 78, estimatedTimeToChargeMinutes: 45 }}
-          />
+          <div className="h-full overflow-auto">
+            <SystemControlView
+              systemStatus={systemStatus}
+              ptuState={ptuState}
+              kalmanState={kalmanState}
+              laserStatus={{ on: true, powerPercent: 65, frequencyHz: 5 }}
+              coolingStatus={{ on: true, currentTempC: 28.5, thresholdTempC: 45 }}
+              batteryStatus={{ totalCapacityKwh: 25.6, currentPercent: 78, estimatedTimeToChargeMinutes: 45 }}
+            />
+          </div>
         )}
       </main>
 
