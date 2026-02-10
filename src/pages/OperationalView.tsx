@@ -89,6 +89,23 @@ export function OperationalView({
     setOperationMode(initialOperationMode);
   }, [initialOperationMode]);
 
+  // On page load, query PTU position and update azimuth/pitch
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { pan, tilt } = await queryPtuPosition();
+        if (!cancelled) {
+          setQueriedPan(pan);
+          setQueriedTilt(tilt);
+        }
+      } catch (e) {
+        if (!cancelled) console.warn('PTU position query on load failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="h-full flex min-h-0">
       {/* Left Panel */}

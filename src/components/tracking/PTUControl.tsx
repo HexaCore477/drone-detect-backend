@@ -480,9 +480,9 @@ export function PTUControl({ ptuState, className, onRefreshPosition }: PTUContro
                 </div>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="icon"
-                  className="shrink-0 self-center h-9 w-9 border-primary/50"
+                  className="shrink-0 self-center h-6 w-6"
                   onClick={async () => {
                     if (!onRefreshPosition) return;
                     setPositionRefreshing(true);
@@ -495,7 +495,7 @@ export function PTUControl({ ptuState, className, onRefreshPosition }: PTUContro
                   disabled={positionRefreshing}
                   title={t('ptu.refreshPosition')}
                 >
-                  <RefreshCw className={cn('h-4 w-4', positionRefreshing && 'animate-spin')} />
+                  <RefreshCw className={cn('h-3.5 w-3.5', positionRefreshing && 'animate-spin')} />
                 </Button>
                 <div className="flex-1 bg-muted/20 p-2 rounded border border-border/50">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{t('ptu.pitch')}</div>
