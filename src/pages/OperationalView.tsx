@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CameraView } from '@/components/tracking/CameraView';
 import { PTUControl } from '@/components/tracking/PTUControl';
-import { CameraZoomControl } from '@/components/tracking/CameraZoomControl';
+import { CameraZoomControl } from '../components/tracking/CameraZoomControl';
 import { OperationModeSelector } from '@/components/tracking/OperationModeSelector';
 import { IndicatorPanels } from '@/components/tracking/IndicatorPanels';
 import { DataPanel, DataGrid, DataCell, DataRow } from '@/components/ui/DataPanel';
