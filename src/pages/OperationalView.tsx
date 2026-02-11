@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CameraView } from '@/components/tracking/CameraView';
 import { PTUControl } from '@/components/tracking/PTUControl';
-import { ScenarioSelector } from '@/components/tracking/ScenarioSelector';
+import { CameraZoomControl } from '@/components/tracking/CameraZoomControl';
 import { OperationModeSelector } from '@/components/tracking/OperationModeSelector';
 import { IndicatorPanels } from '@/components/tracking/IndicatorPanels';
 import { DataPanel, DataGrid, DataCell, DataRow } from '@/components/ui/DataPanel';
@@ -112,10 +112,7 @@ export function OperationalView({
       <div className="w-72 flex flex-col gap-3 p-3 border-r border-border bg-card/50 min-h-0">
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col gap-3 pr-2">
-            <ScenarioSelector 
-              activeScenario={activeScenario} 
-              onSelect={onScenarioChange} 
-            />
+            <CameraZoomControl />
 
             {/* Operation Mode */}
             <OperationModeSelector

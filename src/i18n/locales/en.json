@@ -22,6 +22,16 @@
     "connected": "CONNECTED",
     "disconnected": "DISCONNECTED"
   },
+  "cameraZoom": {
+    "title": "Camera Zoom",
+    "connectForZoom": "Camera connect for zoom control",
+    "zoomIn": "Camera Zoom in",
+    "zoomOut": "Camera Zoom out",
+    "connected": "Connected",
+    "connectedDesc": "Camera zoom control ready",
+    "connectFailed": "Connect failed",
+    "zoomFailed": "Zoom failed"
+  },
   "scenario": {
     "title": "ACTIVE SCENARIO",
     "scene": "SCENE",
