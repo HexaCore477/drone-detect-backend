@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.services.camera import _create_capture, _release_capture, get_frame
 from app.services.detection import detect_balloons
+from app.services import view_subscription
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
@@ -449,7 +450,7 @@ async def tracking_ws(websocket: WebSocket) -> None:
                 next_track_id,
             )
 
-            if payload["balloons"] or payload["timestamp"] > 0:
+            if view_subscription.should_send_tracking() and (payload["balloons"] or payload["timestamp"] > 0):
                 await websocket.send_json(payload)
 
             # Recreate capture if lost

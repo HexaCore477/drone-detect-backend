@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from app.services import ptu as ptu_service
+from app.services import view_subscription
 
 router = APIRouter(prefix="/ptu", tags=["ptu"])
 
@@ -112,8 +113,9 @@ async def ptu_commands_ws(websocket: WebSocket) -> None:
     try:
         while True:
             try:
-                cmd = cmd_queue.get_nowait()
-                await websocket.send_json({"command": cmd})
+                if view_subscription.should_send_ptu_commands():
+                    cmd = cmd_queue.get_nowait()
+                    await websocket.send_json({"command": cmd})
             except queue.Empty:
                 pass
             await asyncio.sleep(0.05)
