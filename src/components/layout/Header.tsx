@@ -28,7 +28,7 @@ export function Header({ activeScenario, systemStatus, className }: HeaderProps)
       </div>
 
       {/* Center: Active Scenario */}
-      <ScenarioInfo scenarioId={activeScenario} />
+      {/* <ScenarioInfo scenarioId={activeScenario} /> */}
 
       {/* Right: System Status */}
       <div className="flex items-center gap-6">

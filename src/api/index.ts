@@ -1,5 +1,12 @@
 export { apiUrl } from './client';
-export { getCameraResolution, type CameraResolution } from './camera';
+export {
+  getCameraResolution,
+  cameraZoomConnect,
+  cameraZoomIn,
+  cameraZoomOut,
+  cameraZoomStop,
+  type CameraResolution,
+} from './camera';
 export {
   getPtuPorts,
   ptuMoveAbsolute,

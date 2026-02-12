@@ -142,7 +142,7 @@ export function CameraView({
           return (
             <div
               key={`pred-${b.id}`}
-              className="absolute w-3 h-3 border-2 border-cyan-400 bg-cyan-400/50 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
+              className="absolute w-5 h-5 border-2 border-cyan-400 bg-cyan-400/50 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
               style={{
                 left: `${scaleX(predX)}%`,
                 top: `${scaleY(predY)}%`,
