@@ -17,11 +17,16 @@ interface WaterfallViewProps {
 
 export function WaterfallView({ logs, ptuState, kalmanState, balloons = [], balloonTimestamp = null, kalmanData = null }: WaterfallViewProps) {
   return (
-    <div className="h-full p-4 grid grid-cols-2 gap-4">
+    <div className="h-full overflow-y-auto p-4 grid grid-cols-2 gap-4">
       {/* Left column: Detection + Tracking */}
       <div className="flex flex-col gap-4">
         <DetectionEventsLog logs={logs} balloons={balloons} balloonTimestamp={balloonTimestamp} />
-        <TrackingStatusLog logs={logs} />
+        <TrackingStatusLog
+          logs={logs}
+          balloons={balloons}
+          balloonTimestamp={balloonTimestamp}
+          kalmanData={kalmanData}
+        />
       </div>
 
       {/* Right column: Kalman + PTU Commands */}
