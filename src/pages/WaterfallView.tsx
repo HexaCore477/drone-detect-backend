@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import type { LogEntry, PTUState, KalmanState, DetectedBalloon } from '@/types/tracking';
+import { startWaterfall, stopWaterfall } from '@/api';
 import type { KalmanFilterData } from '@/hooks/useBalloonTracking';
 import type { PtuCommand } from '@/hooks/usePtuCommands';
 import { DetectionEventsLog } from '@/components/operation/DetectionEventsLog';
@@ -18,6 +20,13 @@ interface WaterfallViewProps {
 }
 
 export function WaterfallView({ logs, ptuState, kalmanState, balloons = [], balloonTimestamp = null, kalmanData = null, ptuCommands = [] }: WaterfallViewProps) {
+  useEffect(() => {
+    startWaterfall().catch((e) => console.warn('start_waterfall failed:', e));
+    return () => {
+      stopWaterfall().catch((e) => console.warn('stop_waterfall failed:', e));
+    };
+  }, []);
+
   return (
     <div className="h-full overflow-y-auto p-4 grid grid-cols-2 gap-4">
       {/* Left column: Detection + Tracking */}

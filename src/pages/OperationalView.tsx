@@ -28,7 +28,7 @@ import {
   DEFAULT_OPERATION_MODE,
 } from '@/data/indicatorDefaults';
 import { useTranslation } from 'react-i18next';
-import { queryPtuPosition } from '@/api';
+import { queryPtuPosition, startOperation, stopOperation } from '@/api';
 
 interface OperationalViewProps {
   balloons: DetectedBalloon[];
@@ -83,6 +83,14 @@ export function OperationalView({
       console.warn('PTU position query failed:', e);
     }
   };
+
+  // Notify backend when Operational view is fully loaded; stop when unmounting
+  useEffect(() => {
+    startOperation().catch((e) => console.warn('start_operation failed:', e));
+    return () => {
+      stopOperation().catch((e) => console.warn('stop_operation failed:', e));
+    };
+  }, []);
 
   // Sync state with prop changes
   useEffect(() => {
