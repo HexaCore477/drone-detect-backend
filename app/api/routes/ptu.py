@@ -1,5 +1,8 @@
 """PTU API routes."""
-from fastapi import APIRouter, HTTPException
+import asyncio
+import queue
+
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from app.services import ptu as ptu_service
@@ -96,3 +99,23 @@ def ptu_disconnect():
     if not success:
         raise HTTPException(status_code=500, detail=message)
     return {"ok": True, "message": message}
+
+
+@router.websocket("/ws/commands")
+async def ptu_commands_ws(websocket: WebSocket) -> None:
+    """
+    Stream PTU movement commands (H51, H52, H61, H62, etc.) when they are sent.
+    Use for Waterfall PTU COMMANDS log.
+    """
+    await websocket.accept()
+    cmd_queue = ptu_service.get_command_broadcast_queue()
+    try:
+        while True:
+            try:
+                cmd = cmd_queue.get_nowait()
+                await websocket.send_json({"command": cmd})
+            except queue.Empty:
+                pass
+            await asyncio.sleep(0.05)
+    except WebSocketDisconnect:
+        pass

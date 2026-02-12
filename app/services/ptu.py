@@ -35,6 +35,8 @@ DIRECTION_COMMANDS: dict[str, bytes] = {
 # Sentinel to stop worker thread
 _STOP = object()
 
+# Queue for broadcasting PTU movement commands (H51, H52, H61, etc.) to WebSocket clients
+_command_broadcast_queue: queue.Queue = queue.Queue()
 
 # Serial connection state
 _current_pan = 0.0
@@ -120,6 +122,10 @@ def _serial_worker() -> None:
                         pt_pulse = _degrees_to_pulse(tilt_deg)
                         payload = f"H51,{az_pulse},{pt_pulse},{speed}E".encode("ascii")
                         _send_and_flush(payload)
+                        try:
+                            _command_broadcast_queue.put_nowait(payload.decode("ascii"))
+                        except queue.Full:
+                            pass
                         logger.debug("PTU move absolute: pan=%.2f°, tilt=%.2f° (%d, %d pulses)", pan_deg, tilt_deg, az_pulse, pt_pulse)
                     elif cmd[0] == "move_relative":
                         _, pan_delta, tilt_delta, speed = cmd
@@ -127,6 +133,10 @@ def _serial_worker() -> None:
                         d_pt = _degrees_to_pulse(tilt_delta)
                         payload = f"H52,{d_az},{d_pt},{speed}E".encode("ascii")
                         _send_and_flush(payload)
+                        try:
+                            _command_broadcast_queue.put_nowait(payload.decode("ascii"))
+                        except queue.Full:
+                            pass
                     elif cmd[0] == "query_position":
                         result_queue = cmd[1]
                         az_pulse = _query_pulse(b"H10E")
@@ -151,7 +161,10 @@ def _serial_worker() -> None:
                         except Exception:
                             # Some backends may not support flush reliably; ignore.
                             pass
-
+                        try:
+                            _command_broadcast_queue.put_nowait(payload.decode("ascii"))
+                        except queue.Full:
+                            pass
                         logger.debug("PTU direction sent: %s (%r)", direction_name, payload)
                     elif cmd[0] == "write":
                         _, data = cmd
@@ -332,3 +345,8 @@ def disconnect() -> tuple[bool, str]:
 def is_connected() -> bool:
     """Return whether PTU is connected."""
     return _connected_port is not None
+
+
+def get_command_broadcast_queue() -> queue.Queue:
+    """Return the queue of PTU movement commands for WebSocket broadcast."""
+    return _command_broadcast_queue
