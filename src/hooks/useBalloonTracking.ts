@@ -20,6 +20,7 @@ export function useBalloonTracking(wsUrl?: string) {
   const [balloons, setBalloons] = useState<DetectedBalloon[]>([]);
   const [ptuPan, setPtuPan] = useState<number | null>(null);
   const [ptuTilt, setPtuTilt] = useState<number | null>(null);
+  const [lastTimestamp, setLastTimestamp] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export function useBalloonTracking(wsUrl?: string) {
       try {
         const data = JSON.parse(event.data as string) as TrackingMessage;
         if (Array.isArray(data.balloons)) {
+          if (typeof data.timestamp === 'number') setLastTimestamp(data.timestamp);
           // Log detection results
           console.log('[useBalloonTracking] Detection update:', {
             timestamp: new Date(data.timestamp).toISOString(),
@@ -95,6 +97,6 @@ export function useBalloonTracking(wsUrl?: string) {
     };
   }, [url]);
 
-  return { balloons, ptuPan, ptuTilt };
+  return { balloons, ptuPan, ptuTilt, lastTimestamp };
 }
 

@@ -1,4 +1,4 @@
-import type { LogEntry, PTUState, KalmanState } from '@/types/tracking';
+import type { LogEntry, PTUState, KalmanState, DetectedBalloon } from '@/types/tracking';
 import { DetectionEventsLog } from '@/components/operation/DetectionEventsLog';
 import { TrackingStatusLog } from '@/components/operation/TrackingStatusLog';
 import { SystemLog } from '@/components/operation/SystemLog';
@@ -9,14 +9,16 @@ interface WaterfallViewProps {
   logs: LogEntry[];
   ptuState: PTUState;
   kalmanState: KalmanState;
+  balloons?: DetectedBalloon[];
+  balloonTimestamp?: number | null;
 }
 
-export function WaterfallView({ logs, ptuState, kalmanState }: WaterfallViewProps) {
+export function WaterfallView({ logs, ptuState, kalmanState, balloons = [], balloonTimestamp = null }: WaterfallViewProps) {
   return (
     <div className="h-full p-4 grid grid-cols-2 gap-4">
       {/* Left column: Detection + Tracking */}
       <div className="flex flex-col gap-4">
-        <DetectionEventsLog logs={logs} />
+        <DetectionEventsLog logs={logs} balloons={balloons} balloonTimestamp={balloonTimestamp} />
         <TrackingStatusLog logs={logs} />
       </div>
 
