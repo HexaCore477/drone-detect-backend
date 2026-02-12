@@ -27,7 +27,7 @@ const Index = () => {
   } = useSimulatedData(activeScenario);
 
   // Live detections from backend YOLO tracking WebSocket
-  const { balloons: trackedBalloons, ptuPan, ptuTilt, lastTimestamp } = useBalloonTracking();
+  const { balloons: trackedBalloons, ptuPan, ptuTilt, lastTimestamp, kalmanData } = useBalloonTracking();
   const balloons = trackedBalloons;
 
   // Update time every second
@@ -121,6 +121,7 @@ const Index = () => {
             kalmanState={kalmanState}
             balloons={balloons}
             balloonTimestamp={lastTimestamp}
+            kalmanData={kalmanData}
           />
         )}
         {viewMode === 'systemControl' && (

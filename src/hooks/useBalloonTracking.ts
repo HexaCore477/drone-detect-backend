@@ -1,11 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DetectedBalloon } from '@/types/tracking';
 
+export interface KalmanFilterData {
+  trackId: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  predX: number;
+  predY: number;
+  measurementX: number;
+  measurementY: number;
+}
+
 interface TrackingMessage {
   timestamp: number;
   balloons: DetectedBalloon[];
   ptuPan?: number | null;
   ptuTilt?: number | null;
+  kalman?: KalmanFilterData | null;
 }
 
 const getDefaultTrackingWsUrl = () => {
@@ -21,6 +34,7 @@ export function useBalloonTracking(wsUrl?: string) {
   const [ptuPan, setPtuPan] = useState<number | null>(null);
   const [ptuTilt, setPtuTilt] = useState<number | null>(null);
   const [lastTimestamp, setLastTimestamp] = useState<number | null>(null);
+  const [kalmanData, setKalmanData] = useState<KalmanFilterData | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -67,9 +81,15 @@ export function useBalloonTracking(wsUrl?: string) {
           if (typeof data.ptuTilt === 'number') {
             setPtuTilt(data.ptuTilt);
           }
+          if (data.kalman && typeof data.kalman.trackId === 'string') {
+            setKalmanData(data.kalman as KalmanFilterData);
+          } else {
+            setKalmanData(null);
+          }
         } else {
           console.warn('[useBalloonTracking] Invalid balloons array, clearing');
           setBalloons([]);
+          setKalmanData(null);
         }
       } catch (e) {
         console.warn('[useBalloonTracking] Parse error', e);
@@ -97,6 +117,6 @@ export function useBalloonTracking(wsUrl?: string) {
     };
   }, [url]);
 
-  return { balloons, ptuPan, ptuTilt, lastTimestamp };
+  return { balloons, ptuPan, ptuTilt, lastTimestamp, kalmanData };
 }
 
