@@ -35,8 +35,9 @@ DIRECTION_COMMANDS: dict[str, bytes] = {
 # Sentinel to stop worker thread
 _STOP = object()
 
-# Queue for broadcasting PTU movement commands (H51, H52, H61, etc.) to WebSocket clients
-_command_broadcast_queue: queue.Queue = queue.Queue()
+# Queue for broadcasting PTU movement commands (H51, H52, H61, etc.) to WebSocket clients.
+# maxsize=1 so we keep only the newest; old data is dropped when full.
+_command_broadcast_queue: queue.Queue = queue.Queue(maxsize=1)
 
 # Serial connection state
 _current_pan = 0.0
@@ -125,7 +126,8 @@ def _serial_worker() -> None:
                         try:
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         except queue.Full:
-                            pass
+                            _command_broadcast_queue.get_nowait()
+                            _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         logger.debug("PTU move absolute: pan=%.2f°, tilt=%.2f° (%d, %d pulses)", pan_deg, tilt_deg, az_pulse, pt_pulse)
                     elif cmd[0] == "move_relative":
                         _, pan_delta, tilt_delta, speed = cmd
@@ -136,7 +138,8 @@ def _serial_worker() -> None:
                         try:
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         except queue.Full:
-                            pass
+                            _command_broadcast_queue.get_nowait()
+                            _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                     elif cmd[0] == "query_position":
                         result_queue = cmd[1]
                         az_pulse = _query_pulse(b"H10E")
@@ -164,7 +167,8 @@ def _serial_worker() -> None:
                         try:
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         except queue.Full:
-                            pass
+                            _command_broadcast_queue.get_nowait()
+                            _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         logger.debug("PTU direction sent: %s (%r)", direction_name, payload)
                     elif cmd[0] == "write":
                         _, data = cmd
@@ -183,8 +187,31 @@ def _enqueue(cmd: tuple) -> bool:
     """Enqueue command for worker. Returns True if queued, False if not connected."""
     if _serial is None:
         return False
+    # For move commands: drop older move commands, keep only newest
+    cmd_type = cmd[0] if cmd else None
+    if cmd_type in ("move_absolute", "move_relative", "direction"):
+        _drop_old_move_commands()
     _command_queue.put(cmd)
     return True
+
+
+def _drop_old_move_commands() -> None:
+    """Drain move commands from queue, keep non-move items (query_position, _STOP)."""
+    kept: list = []
+    try:
+        while True:
+            item = _command_queue.get_nowait()
+            if item is _STOP:
+                kept.append(item)
+            elif isinstance(item, tuple) and item[0] == "query_position":
+                kept.append(item)
+            else:
+                # move_absolute, move_relative, direction - drop
+                pass
+    except queue.Empty:
+        pass
+    for item in kept:
+        _command_queue.put(item)
 
 
 def move_absolute(pan: float, tilt: float, speed: int = DEFAULT_SPEED_PTU) -> tuple[bool, str]:
