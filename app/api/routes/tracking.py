@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.services.camera import _create_capture, _release_capture, get_frame
 from app.services.detection import detect_balloons
+from app.services import view_subscription
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
@@ -149,8 +150,8 @@ class Track:
     def __init__(self, track_id: str, detection: Dict, timestamp: float):
         self.id = track_id
         self.last_seen = timestamp
-        # Color label based on detection (red vs other)
-        self.color = "red" if detection.get("is_red") else "other"
+        # Color from pixel-based detection (red, blue, green, yellow, other)
+        self.color = detection.get("color", "other")
         self.size = "medium"
         self.is_target = False
 
@@ -158,6 +159,7 @@ class Track:
         cy = detection["centerY"]
         self.kalman = KalmanFilter2D(cx, cy, dt=SEND_INTERVAL_SEC)
         self.kalman.update(cx, cy)
+        self._last_measurement = (float(cx), float(cy))
 
         # Store bbox from last detection (Kalman only tracks center)
         self._bbox = {
@@ -174,6 +176,8 @@ class Track:
         self.kalman.predict(dt=timestamp - self.last_seen)
         self.kalman.update(cx, cy)
         self.last_seen = timestamp
+        self._last_measurement = (float(cx), float(cy))
+        self.color = detection.get("color", self.color)
         self._bbox = {
             "bbox_x": detection["bbox_x"],
             "bbox_y": detection["bbox_y"],
@@ -340,17 +344,14 @@ def _run_detection_and_tracking(
 
     balloons: List[DetectedBalloon] = []
     primary_pred: Optional[Dict[str, float]] = None
+    primary_item: Optional[Dict[str, Any]] = None
 
     if track_items:
         # Rule:
         # 1. If red balloons exist -> show only the largest red balloon.
         # 2. If no red balloons    -> show only the largest balloon (any color).
         red_items = [item for item in track_items if item["track"].color == "red"]
-        if red_items:
-            primary_item = max(red_items, key=lambda it: it["area"])
-        else:
-            primary_item = max(track_items, key=lambda it: it["area"])
-
+        primary_item = max(red_items, key=lambda it: it["area"]) if red_items else max(track_items, key=lambda it: it["area"])
         t = primary_item["track"]
         cx = primary_item["cx"]
         cy = primary_item["cy"]
@@ -396,9 +397,31 @@ def _run_detection_and_tracking(
             timestamp,
         )
 
+    # Kalman filter state for primary track (for Waterfall Kalman log)
+    kalman_data: Optional[Dict[str, Any]] = None
+    if track_items and primary_item:
+        t = primary_item["track"]
+        k = t.kalman
+        x, y = float(k.state[0, 0]), float(k.state[1, 0])
+        vx, vy = float(k.state[2, 0]), float(k.state[3, 0])
+        pred_cx, pred_cy = primary_item["pred_cx"], primary_item["pred_cy"]
+        last_meas = getattr(t, "_last_measurement", (x, y))
+        kalman_data = {
+            "trackId": t.id,
+            "x": x,
+            "y": y,
+            "vx": vx,
+            "vy": vy,
+            "predX": float(pred_cx),
+            "predY": float(pred_cy),
+            "measurementX": float(last_meas[0]),
+            "measurementY": float(last_meas[1]),
+        }
+
     payload = {
         "timestamp": int(timestamp * 1000),
         "balloons": [b.model_dump() for b in balloons],
+        "kalman": kalman_data,
     }
     return cap, tracks, next_track_id, payload
 
@@ -428,7 +451,7 @@ async def tracking_ws(websocket: WebSocket) -> None:
                 next_track_id,
             )
 
-            if payload["balloons"] or payload["timestamp"] > 0:
+            if view_subscription.should_send_tracking() and (payload["balloons"] or payload["timestamp"] > 0):
                 await websocket.send_json(payload)
 
             # Recreate capture if lost

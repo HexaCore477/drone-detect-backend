@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import camera, config, ptu, stream, tracking
+from app.api.routes import camera, config, ptu, stream, tracking, view_subscription
 from app.core.config import get_settings
 from app.services import auto_tracking, config as config_service, ptu as ptu_service
 
@@ -47,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(ptu.router, prefix="/api")
     app.include_router(tracking.router, prefix="/api")
     app.include_router(config.router, prefix="/api")
+    app.include_router(view_subscription.router, prefix="/api")
 
     @app.get("/")
     def root():

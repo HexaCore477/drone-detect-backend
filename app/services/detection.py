@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 import cv2
+import numpy as np
 import torch
 
 try:
@@ -54,13 +55,117 @@ def _get_model() -> "YOLO":
     return _MODEL
 
 
-# Class names that count as "red" (case-insensitive)
+# Class names that count as "red" (case-insensitive) - used only if model has color classes
 RED_CLASS_NAMES = frozenset({"red", "red_balloon", "balloon_red"})
 
+# Use inner region (60% of bbox) to avoid edges and background
+ROI_INNER_SCALE = 0.6  # Use center 60% of bbox
 
-def _is_red_class(class_name: str) -> bool:
-    """Return True if the class represents a red balloon."""
-    return class_name.lower().strip() in RED_CLASS_NAMES
+# Minimum match percentage (0–1) to accept a color classification
+MIN_COLOR_MATCH = 0.1
+
+# Color ranges in HSV (OpenCV: H 0-180, S 0-255, V 0-255)
+# Red wraps around 0/180, so it uses two ranges
+COLOR_RANGES: Dict[str, Any] = {
+    "white": ([0, 0, 200], [180, 30, 255]),
+    "red": ([0, 100, 100], [10, 255, 255], [170, 100, 100], [180, 255, 255]),
+    "green": ([40, 50, 50], [80, 255, 255]),
+    "blue": ([100, 50, 50], [130, 255, 255]),
+    "black": ([0, 0, 0], [180, 255, 30]),
+    "orange": ([10, 100, 100], [25, 255, 255]),
+    "yellow": ([25, 100, 100], [35, 255, 255]),
+}
+
+# Map classifier output to API-supported colors
+SUPPORTED_COLORS = frozenset({"red", "blue", "green", "yellow"})
+
+
+def _classify_color_from_roi(roi: np.ndarray) -> str | None:
+    """
+    Classify color from an ROI using HSV ranges and grid-based pixel sampling.
+
+    Samples pixels in a grid pattern, checks each color range, and returns
+    the color with the highest match percentage (min 10% match).
+    """
+    if roi.size == 0:
+        return None
+
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    sample_step = max(2, min(roi.shape[0] // 20, roi.shape[1] // 20))
+    sampled_pixels = hsv[::sample_step, ::sample_step]
+    total_pixels = sampled_pixels.shape[0] * sampled_pixels.shape[1]
+
+    if total_pixels == 0:
+        return None
+
+    color_scores: Dict[str, float] = {}
+
+    for color_name, ranges in COLOR_RANGES.items():
+        if len(ranges) == 2:
+            lower = np.array(ranges[0])
+            upper = np.array(ranges[1])
+            mask = np.all(
+                (sampled_pixels >= lower) & (sampled_pixels <= upper), axis=2
+            )
+        else:
+            # Multiple ranges (e.g. red wraps at 0 and 180)
+            lower1, upper1 = np.array(ranges[0]), np.array(ranges[1])
+            lower2, upper2 = np.array(ranges[2]), np.array(ranges[3])
+            mask1 = np.all(
+                (sampled_pixels >= lower1) & (sampled_pixels <= upper1), axis=2
+            )
+            mask2 = np.all(
+                (sampled_pixels >= lower2) & (sampled_pixels <= upper2), axis=2
+            )
+            mask = mask1 | mask2
+
+        match_percentage = float(np.sum(mask)) / total_pixels
+        color_scores[color_name] = match_percentage
+
+    best_color = max(color_scores, key=color_scores.get)
+    if color_scores[best_color] < MIN_COLOR_MATCH:
+        return None
+
+    return best_color
+
+
+def detect_color_from_roi(
+    frame: "cv2.Mat",
+    bbox_x: float,
+    bbox_y: float,
+    bbox_w: float,
+    bbox_h: float,
+) -> Literal["red", "blue", "green", "yellow", "other"]:
+    """
+    Detect balloon color from the bounding box region using HSV color analysis.
+
+    Crops the center region of the bbox, samples pixels in a grid, and
+    classifies by matching against HSV color ranges (red uses two ranges
+    since it wraps at 0/180).
+
+    Returns one of: red, blue, green, yellow, other
+    """
+    h_img, w_img = frame.shape[:2]
+    cx = bbox_x + bbox_w / 2
+    cy = bbox_y + bbox_h / 2
+    inner_w = max(4, bbox_w * ROI_INNER_SCALE)
+    inner_h = max(4, bbox_h * ROI_INNER_SCALE)
+    x1 = int(max(0, cx - inner_w / 2))
+    y1 = int(max(0, cy - inner_h / 2))
+    x2 = int(min(w_img, x1 + inner_w))
+    y2 = int(min(h_img, y1 + inner_h))
+
+    if x2 <= x1 or y2 <= y1:
+        return "other"
+
+    roi = frame[y1:y2, x1:x2]
+    result = _classify_color_from_roi(roi)
+
+    if result is None:
+        return "other"
+    if result in SUPPORTED_COLORS:
+        return result  # type: ignore[return-value]
+    return "other"
 
 
 def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
@@ -94,7 +199,9 @@ def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
             class_name = names.get(cls_id, "")
         else:
             class_name = names[cls_id] if 0 <= cls_id < len(names) else ""
-        is_red = _is_red_class(class_name)
+
+        # Pixel-based color detection (model not trained for color classes)
+        color = detect_color_from_roi(frame, float(x1), float(y1), float(w), float(h))
 
         detections.append(
             {
@@ -106,7 +213,8 @@ def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
                 "centerY": float(y1 + h / 2.0),
                 "confidence": float(box.conf[0].item()),
                 "class_name": class_name,
-                "is_red": is_red,
+                "color": color,
+                "is_red": color == "red",
             }
         )
 
