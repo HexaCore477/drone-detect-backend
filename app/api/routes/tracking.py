@@ -150,8 +150,8 @@ class Track:
     def __init__(self, track_id: str, detection: Dict, timestamp: float):
         self.id = track_id
         self.last_seen = timestamp
-        # Color label based on detection (red vs other)
-        self.color = "red" if detection.get("is_red") else "other"
+        # Color from pixel-based detection (red, blue, green, yellow, other)
+        self.color = detection.get("color", "other")
         self.size = "medium"
         self.is_target = False
 
@@ -177,6 +177,7 @@ class Track:
         self.kalman.update(cx, cy)
         self.last_seen = timestamp
         self._last_measurement = (float(cx), float(cy))
+        self.color = detection.get("color", self.color)
         self._bbox = {
             "bbox_x": detection["bbox_x"],
             "bbox_y": detection["bbox_y"],
