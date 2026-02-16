@@ -27,7 +27,7 @@ export interface KalmanState {
 
 export interface DetectedBalloon {
   id: string;
-  color: 'red' | 'blue' | 'green' | 'yellow';
+  color: 'red' | 'blue' | 'green' | 'yellow' | 'other';
   size: BalloonSize;
   centerX: number;
   centerY: number;

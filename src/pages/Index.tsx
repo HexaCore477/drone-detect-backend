@@ -5,6 +5,7 @@ import { WaterfallView } from '@/pages/WaterfallView';
 import { SystemControlView } from '@/pages/SystemControlView';
 import { useSimulatedData } from '@/hooks/useSimulatedData';
 import { useBalloonTracking } from '@/hooks/useBalloonTracking';
+import { usePtuCommands } from '@/hooks/usePtuCommands';
 import type { ScenarioId } from '@/types/tracking';
 import { cn } from '@/lib/utils';
 import { Monitor, Activity, Sliders } from 'lucide-react';
@@ -27,7 +28,8 @@ const Index = () => {
   } = useSimulatedData(activeScenario);
 
   // Live detections from backend YOLO tracking WebSocket
-  const { balloons: trackedBalloons, ptuPan, ptuTilt } = useBalloonTracking();
+  const { balloons: trackedBalloons, ptuPan, ptuTilt, lastTimestamp, kalmanData } = useBalloonTracking();
+  const { commands: ptuCommands } = usePtuCommands();
   const balloons = trackedBalloons;
 
   // Update time every second
@@ -119,6 +121,10 @@ const Index = () => {
             logs={logs}
             ptuState={ptuState}
             kalmanState={kalmanState}
+            balloons={balloons}
+            balloonTimestamp={lastTimestamp}
+            kalmanData={kalmanData}
+            ptuCommands={ptuCommands}
           />
         )}
         {viewMode === 'systemControl' && (

@@ -23,3 +23,9 @@ export {
   type PtuPosition,
 } from './ptu';
 export { getAutoTracking, setAutoTracking, type AutoTrackingConfig } from './config';
+export {
+  startOperation,
+  stopOperation,
+  startWaterfall,
+  stopWaterfall,
+} from './viewSubscription';
