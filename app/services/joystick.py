@@ -150,9 +150,9 @@ def _joystick_loop() -> None:
             pygame.event.pump()
             x_raw = _joystick.get_axis(AXIS_X)
             y_raw = _joystick.get_axis(AXIS_Y)
-            # Pygame axes: -1 to 1, may have small noise
+            # Pygame axes: -1 to 1. Invert Y: forward push -> down, backward pull -> up
             x = _apply_deadzone(float(x_raw))
-            y = _apply_deadzone(float(y_raw))
+            y = -_apply_deadzone(float(y_raw))
 
             mag = math.sqrt(x * x + y * y)
             if mag > 1.0:
