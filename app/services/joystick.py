@@ -9,6 +9,7 @@ import threading
 import time
 from typing import Optional
 
+from app.services import camera_zoom as zoom_service
 from app.services import config as config_service
 from app.services import ptu as ptu_service
 
@@ -34,6 +35,12 @@ POLL_INTERVAL_SEC = 0.05
 # Joystick axis indices (typical gamepad layout)
 AXIS_X = 0  # Left stick X: negative=left, positive=right
 AXIS_Y = 1  # Left stick Y: negative=forward/up, positive=backward/down
+AXIS_TWIST = 2  # Twist/Z: negative=left (zoom in), positive=right (zoom out)
+
+# Twist: step-by-step zoom. Must exceed threshold to trigger; return to deadzone to re-arm.
+TWIST_DEADZONE = 0.3
+TWIST_THRESHOLD = 0.5
+ZOOM_STEP_DURATION_SEC = 0.2
 
 _joystick_thread: Optional[threading.Thread] = None
 _joystick_stop = threading.Event()
@@ -74,6 +81,28 @@ def _direction_from_axes(x: float, y: float) -> str:
     if y > 0:
         return "down"
     return "up"
+
+
+def _twist_zone(twist: float) -> str:
+    """Return 'neutral', 'left', or 'right' based on twist value."""
+    if twist < -TWIST_THRESHOLD:
+        return "left"
+    if twist > TWIST_THRESHOLD:
+        return "right"
+    return "neutral"
+
+
+def _do_zoom_step(direction: str) -> bool:
+    """Execute one zoom step (in or out). Blocks for ZOOM_STEP_DURATION_SEC. Returns success."""
+    if direction == "in":
+        ok, _ = zoom_service.zoom_in()
+    else:
+        ok, _ = zoom_service.zoom_out()
+    if not ok:
+        return False
+    time.sleep(ZOOM_STEP_DURATION_SEC)
+    zoom_service.zoom_stop()
+    return True
 
 
 def _direction_from_axes_diagonal(x: float, y: float) -> str:
@@ -131,11 +160,32 @@ def _joystick_loop() -> None:
 
     last_direction: Optional[str] = None
     last_speed = 0
+    last_twist_zone: str = "neutral"
+    has_twist: bool = _joystick.get_numaxes() > AXIS_TWIST
 
     while not _joystick_stop.is_set():
         try:
+            pygame.event.pump()
+
+            # ----- Twist: step-by-step zoom (left=in, right=out) -----
+            if has_twist:
+                twist_raw = float(_joystick.get_axis(AXIS_TWIST))
+                twist_zone = _twist_zone(twist_raw)
+                if twist_zone != last_twist_zone:
+                    if last_twist_zone == "neutral" and twist_zone == "left":
+                        if _do_zoom_step("in"):
+                            logger.debug("Joystick zoom in (twist left)")
+                        else:
+                            logger.warning("Joystick zoom in failed (camera not connected?)")
+                    elif last_twist_zone == "neutral" and twist_zone == "right":
+                        if _do_zoom_step("out"):
+                            logger.debug("Joystick zoom out (twist right)")
+                        else:
+                            logger.warning("Joystick zoom out failed (camera not connected?)")
+                    last_twist_zone = twist_zone
+
+            # ----- PTU direction (only when auto-tracking off and PTU connected) -----
             if config_service.get_auto_tracking():
-                # Auto-tracking on: joystick disabled, send pause if we were moving
                 if last_direction and last_direction != "pause":
                     ptu_service.direction("pause")
                     last_direction = "pause"
@@ -147,7 +197,6 @@ def _joystick_loop() -> None:
                 time.sleep(POLL_INTERVAL_SEC)
                 continue
 
-            pygame.event.pump()
             x_raw = _joystick.get_axis(AXIS_X)
             y_raw = _joystick.get_axis(AXIS_Y)
             # Pygame axes: -1 to 1. Invert Y: forward push -> down, backward pull -> up
