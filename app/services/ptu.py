@@ -21,6 +21,8 @@ DEFAULT_SPEED_PTU = 4000
 # H10E → get azimuth (A1) in pulses
 # H20E → get pitch (A2) in pulses
 
+# Direction command templates: H61/H62/H63/H64 use speed; H60 uses az_dir,pitch_dir,speed; H65 is pause
+DIRECTION_SPEED_DEFAULT = 50
 DIRECTION_COMMANDS: dict[str, bytes] = {
     "left": b"H61,50E",
     "right": b"H62,50E",
@@ -32,6 +34,24 @@ DIRECTION_COMMANDS: dict[str, bytes] = {
     "left-up": b"H60,1,1,50E",
     "pause": b"H65E",
 }
+
+
+def _build_direction_payload(direction_name: str, speed: int) -> bytes:
+    """Build PTU direction command bytes with given speed. Pause ignores speed."""
+    if direction_name == "pause":
+        return b"H65E"
+    if direction_name in ("left", "right", "up", "down"):
+        cmd_map = {"left": "H61", "right": "H62", "up": "H63", "down": "H64"}
+        return f"{cmd_map[direction_name]},{speed}E".encode("ascii")
+    # Diagonals: H60,az_dir,pitch_dir,speed
+    diag_map = {
+        "right-up": (-1, 1),
+        "left-down": (1, -1),
+        "right-down": (-1, -1),
+        "left-up": (1, 1),
+    }
+    az_dir, pitch_dir = diag_map.get(direction_name, (0, 0))
+    return f"H60,{az_dir},{pitch_dir},{speed}E".encode("ascii")
 
 # Sentinel to stop worker thread
 _STOP = object()
@@ -174,12 +194,12 @@ def _serial_worker() -> None:
                         except queue.Full:
                             pass
                     elif cmd[0] == "direction":
-                        _, direction_name = cmd
-                        payload = DIRECTION_COMMANDS.get(direction_name)
-                        if payload is None:
+                        direction_name = cmd[1]
+                        speed = cmd[2] if len(cmd) >= 3 else DIRECTION_SPEED_DEFAULT
+                        if direction_name not in DIRECTION_COMMANDS:
                             raise ValueError(f"Unknown direction: {direction_name}")
+                        payload = _build_direction_payload(direction_name, speed)
 
-                        # Send ASCII command as-is
                         _serial.write(payload)
                         try:
                             _serial.flush()
@@ -290,18 +310,21 @@ def query_position() -> tuple[bool, float, float]:
         return False, _current_pan, _current_tilt
 
 
-def direction(direction_name: str) -> tuple[bool, str]:
+def direction(direction_name: str, speed: int | None = None) -> tuple[bool, str]:
     """
     Move PTU in the given direction.
     direction_name: left, right, up, down, pause, left-up, left-down, right-up, right-down
+    speed: optional PTU speed (40, 50, 60, etc.); default 50. Ignored for pause.
     Returns (success, message). Command is queued for worker thread.
     """
     if direction_name not in DIRECTION_COMMANDS:
         return False, f"Unknown direction: {direction_name}"
     try:
         if _connected_port:
-            _enqueue(("direction", direction_name))
-        # If not connected, we don't have hardware to move. Treat as no-op success.
+            cmd: tuple = ("direction", direction_name)
+            if speed is not None:
+                cmd = ("direction", direction_name, speed)
+            _enqueue(cmd)
         return True, "OK"
     except Exception as e:
         logger.error("PTU direction failed: %s", e)
