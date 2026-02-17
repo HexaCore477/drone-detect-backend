@@ -3,6 +3,7 @@ import logging
 import queue
 import re
 import threading
+import time
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -106,6 +107,25 @@ def _query_pulse(cmd: bytes) -> Optional[int]:
         logger.warning("PTU query failed: %s", e)
     return None
 
+def _wait_for_done(timeout: float = 10.0) -> bool:
+    """Wait for PTU to be done moving. Returns True if done, False if timeout."""
+    if _serial is None or not _serial.is_open:
+        return False
+    deadline = time.monotonic() + timeout
+    buffer = b""
+    while time.monotonic() < deadline:
+        try:
+            chunk = _serial.read(64)
+            if chunk:
+                buffer += chunk
+                if b"done" in buffer.lower():
+                    logger.warning("PTU wait for done: %s", buffer)
+                    return True
+        except Exception as e:
+            logger.warning("PTU wait for done failed: %s", e)
+            return False
+    logger.warning("PTU wait for done timeout")
+    return False
 
 def _serial_worker() -> None:
     """Worker thread: processes commands from queue and performs serial I/O."""
@@ -123,6 +143,7 @@ def _serial_worker() -> None:
                         pt_pulse = _degrees_to_pulse(tilt_deg)
                         payload = f"H51,{az_pulse},{pt_pulse},{speed}E".encode("ascii")
                         _send_and_flush(payload)
+                        _wait_for_done()
                         try:
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         except queue.Full:
@@ -135,6 +156,7 @@ def _serial_worker() -> None:
                         d_pt = _degrees_to_pulse(tilt_delta)
                         payload = f"H52,{d_az},{d_pt},{speed}E".encode("ascii")
                         _send_and_flush(payload)
+                        _wait_for_done()
                         try:
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         except queue.Full:
