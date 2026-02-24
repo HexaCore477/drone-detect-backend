@@ -24,9 +24,9 @@ JOYSTICK_DEADZONE = 0.1
 # 0.4 to 0.7 -> speed 50
 # 0.7 to 1.0 -> speed 60
 SPEED_TIERS = [
-    (0.1, 40),
-    (0.4, 50),
-    (0.7, 60),
+    (0.1, 800),
+    (0.4, 1000),
+    (0.7, 1200),
 ]
 
 # Poll interval (seconds)
