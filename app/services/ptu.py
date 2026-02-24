@@ -22,16 +22,16 @@ DEFAULT_SPEED_PTU = 4000
 # H20E → get pitch (A2) in pulses
 
 # Direction command templates: H61/H62/H63/H64 use speed; H60 uses az_dir,pitch_dir,speed; H65 is pause
-DIRECTION_SPEED_DEFAULT = 50
+DIRECTION_SPEED_DEFAULT = 1000
 DIRECTION_COMMANDS: dict[str, bytes] = {
-    "left": b"H61,50E",
-    "right": b"H62,50E",
-    "up": b"H63,50E",
-    "down": b"H64,50E",
-    "right-up": b"H60,-1,1,50E",
-    "left-down": b"H60,1,-1,50E",
-    "right-down": b"H60,-1,-1,50E",
-    "left-up": b"H60,1,1,50E",
+    "left": b"H61,1000E",
+    "right": b"H62,1000E",
+    "up": b"H63,1000E",
+    "down": b"H64,1000E",
+    "right-up": b"H60,-1,1,1000E",
+    "left-down": b"H60,1,-1,1000E",
+    "right-down": b"H60,-1,-1,1000E",
+    "left-up": b"H60,1,1,1000E",
     "pause": b"H65E",
 }
 
@@ -174,6 +174,7 @@ def _serial_worker() -> None:
                     elif cmd[0] == "direction":
                         direction_name = cmd[1]
                         speed = cmd[2] if len(cmd) >= 3 else DIRECTION_SPEED_DEFAULT
+                        print(f"direction_name: {direction_name}, speed: {speed}")
                         if direction_name not in DIRECTION_COMMANDS:
                             raise ValueError(f"Unknown direction: {direction_name}")
                         payload = _build_direction_payload(direction_name, speed)

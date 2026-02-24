@@ -10,6 +10,7 @@ import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from app.services.alert_mail import process_balloon_detection
 from app.services.camera import _create_capture, _release_capture, get_frame
 from app.services.detection import detect_balloons
 from app.services import view_subscription
@@ -396,6 +397,9 @@ def _run_detection_and_tracking(
             int(primary_pred["height"]),
             timestamp,
         )
+
+    # Alert email: send when balloon count/color state changes and is stable for 5 frames
+    process_balloon_detection(timestamp, track_items)
 
     # Kalman filter state for primary track (for Waterfall Kalman log)
     kalman_data: Optional[Dict[str, Any]] = None
