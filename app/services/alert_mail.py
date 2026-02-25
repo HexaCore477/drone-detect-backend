@@ -4,6 +4,8 @@ Sends an alert when the total balloon count changes. Drift avoidance:
 - New count must be stable for 5 consecutive frames
 - 60 second cooldown between alerts
 - 1 second minimum gap for Resend API rate limit (2 req/sec)
+
+Enable via ALERT_MAIL_ENABLED=true in .env
 """
 import logging
 import os
@@ -13,6 +15,12 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
+
+
+def _is_enabled() -> bool:
+    """Return True if alert mail is enabled via ALERT_MAIL_ENABLED env."""
+    val = os.getenv("ALERT_MAIL_ENABLED", "false").strip().lower()
+    return val in ("true", "1", "yes")
 
 STABILITY_COUNT = 20
 ALERT_COOLDOWN_SEC = 60.0
@@ -88,6 +96,9 @@ def _send(timestamp: float, count: int) -> bool:
 
 def process_balloon_detection(timestamp: float, track_items: List[Dict[str, Any]]) -> None:
     """Process detection state. Send alert when total count changes and is stable."""
+    if not _is_enabled():
+        return
+
     global _prev_count, _consecutive_same, _last_alerted_count, _last_send_time
 
     count = len(track_items) if track_items else 0
