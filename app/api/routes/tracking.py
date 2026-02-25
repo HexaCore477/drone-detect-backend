@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.services.alert_mail import process_balloon_detection
 from app.services.camera import _create_capture, _release_capture, get_frame
-from app.services.detection import detect_balloons
+from app.services.detection import detect_objects
 from app.services import view_subscription
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
@@ -309,8 +309,8 @@ def _run_detection_and_tracking(
     timestamp = time.time()
     frame_height, frame_width = frame.shape[:2]
 
-    # Run YOLO detection (returns all current balloons)
-    raw_detections = detect_balloons(frame)
+    # Run YOLO detection (balloon or drone based on DRONE_DETECTION_ENABLED)
+    raw_detections = detect_objects(frame)
 
     if raw_detections:
         # Update existing tracks using IoU association
