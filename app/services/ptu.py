@@ -22,7 +22,7 @@ DEFAULT_SPEED_PTU = 4000
 # H20E → get pitch (A2) in pulses
 
 # Direction command templates: H61/H62/H63/H64 use speed; H60 uses az_dir,pitch_dir,speed; H65 is pause
-DIRECTION_SPEED_DEFAULT = 1000
+DIRECTION_SPEED_DEFAULT = 2000
 DIRECTION_COMMANDS: dict[str, bytes] = {
     "left": b"H61,1000E",
     "right": b"H62,1000E",
