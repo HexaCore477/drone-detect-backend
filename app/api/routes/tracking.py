@@ -323,25 +323,35 @@ def _run_detection_and_tracking(
             track_id = f"balloon-{next_track_id}"
             next_track_id += 1
             tracks[track_id] = Track(track_id, det, timestamp)
+    else:
+        # No detections this frame: age out stale tracks so we don't send fixed/stale positions
+        current_time = timestamp
+        tracks_to_remove = [
+            tid for tid, track in tracks.items()
+            if current_time - track.last_seen > MAX_TRACK_AGE_SEC
+        ]
+        for tid in tracks_to_remove:
+            del tracks[tid]
 
-    # Build per-track data first (for filtering by red / area)
+    # Build per-track data only when we have detections this frame (avoid sending stale positions)
     track_items: List[Dict[str, Any]] = []
-    for track in tracks.values():
-        cx, cy = track.get_current_position()
-        pred_cx, pred_cy = track.predict(PREDICTION_LEAD_SEC)
-        bbox = track.get_current_bbox()
-        area = bbox["bbox_w"] * bbox["bbox_h"]
-        track_items.append(
-            {
-                "track": track,
-                "cx": cx,
-                "cy": cy,
-                "pred_cx": pred_cx,
-                "pred_cy": pred_cy,
-                "bbox": bbox,
-                "area": area,
-            }
-        )
+    if raw_detections:
+        for track in tracks.values():
+            cx, cy = track.get_current_position()
+            pred_cx, pred_cy = track.predict(PREDICTION_LEAD_SEC)
+            bbox = track.get_current_bbox()
+            area = bbox["bbox_w"] * bbox["bbox_h"]
+            track_items.append(
+                {
+                    "track": track,
+                    "cx": cx,
+                    "cy": cy,
+                    "pred_cx": pred_cx,
+                    "pred_cy": pred_cy,
+                    "bbox": bbox,
+                    "area": area,
+                }
+            )
 
     balloons: List[DetectedBalloon] = []
     primary_pred: Optional[Dict[str, float]] = None
