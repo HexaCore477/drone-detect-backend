@@ -1,7 +1,6 @@
 """Automatic tracking service - moves PTU to align predicted point with frame center."""
 import asyncio
 import logging
-import os
 import threading
 import time
 from typing import Optional, Tuple
@@ -14,12 +13,22 @@ from app.services.camera import get_resolution
 logger = logging.getLogger(__name__)
 
 
-def _get_auto_tracking_speed() -> int:
-    """PTU speed for auto-tracking moves. From AUTO_TRACKING_SPEED in .env."""
-    try:
-        return int(os.getenv("AUTO_TRACKING_SPEED", "10000"))
-    except (TypeError, ValueError):
-        return 10000
+# Auto-tracking speed tiers by pixel distance from center (distance = error_px)
+MAX_PTU_SPEED = 20000
+MIN_PTU_SPEED = 2000
+
+def _get_speed_from_distance(distance_px: float, width: float) -> int:
+    """Return PTU speed based on pixel distance between prediction point and center."""
+    if width <= 0:
+        return MAX_PTU_SPEED
+
+    # Normalize distance (0 to 1)
+    norm = min(distance_px / (width / 2), 1.0)
+
+    # Linear interpolation
+    speed = MIN_PTU_SPEED + norm * (MAX_PTU_SPEED - MIN_PTU_SPEED)
+
+    return int(speed)
 
 
 # Auto-tracking configuration
@@ -117,14 +126,16 @@ async def _run_auto_tracking_loop() -> None:
                 pred_x, pred_y, center_x, center_y, error_x, error_y, delta_pan, delta_pitch
             )
             
-            # Move PTU
-            speed = _get_auto_tracking_speed()
+            # Move PTU - speed varies by pixel distance from center
+            speed = _get_speed_from_distance(error_px, width)
             success, msg = ptu_service.move_relative(delta_pan, delta_pitch, speed)
             if not success:
                 logger.warning("Auto-tracking move failed: %s", msg)
             else:
-                logger.debug("Auto-tracking move sent: pan=%.3f°, pitch=%.3f°, speed=%d", 
-                           delta_pan, delta_pitch, speed)
+                logger.debug(
+                    "Auto-tracking move sent: pan=%.3f°, pitch=%.3f°, speed=%d (dist=%.1f px)",
+                    delta_pan, delta_pitch, speed, error_px
+                )
             
             await asyncio.sleep(UPDATE_INTERVAL_SEC)
             
