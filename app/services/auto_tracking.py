@@ -1,6 +1,7 @@
 """Automatic tracking service - moves PTU to align predicted point with frame center."""
 import asyncio
 import logging
+import os
 import threading
 import time
 from typing import Optional, Tuple
@@ -12,11 +13,19 @@ from app.services.camera import get_resolution
 
 logger = logging.getLogger(__name__)
 
+
+def _get_auto_tracking_speed() -> int:
+    """PTU speed for auto-tracking moves. From AUTO_TRACKING_SPEED in .env."""
+    try:
+        return int(os.getenv("AUTO_TRACKING_SPEED", "10000"))
+    except (TypeError, ValueError):
+        return 10000
+
+
 # Auto-tracking configuration
 DEFAULT_HFOV_DEG = 60.0  # Horizontal field of view in degrees
 DEADBAND_PX = 5.0  # Don't move if error is smaller than this (pixels)
 MAX_STEP_DEG = 2.0  # Maximum step per update in degrees
-AUTO_TRACKING_SPEED = 1000  # PTU speed for auto-tracking moves
 UPDATE_INTERVAL_SEC = 0.1  # Check every 100ms
 PREDICTION_LEAD_SEC = 0.5  # 500ms ahead prediction
 # PTU axis inversion
@@ -109,12 +118,13 @@ async def _run_auto_tracking_loop() -> None:
             )
             
             # Move PTU
-            success, msg = ptu_service.move_relative(delta_pan, delta_pitch, AUTO_TRACKING_SPEED)
+            speed = _get_auto_tracking_speed()
+            success, msg = ptu_service.move_relative(delta_pan, delta_pitch, speed)
             if not success:
                 logger.warning("Auto-tracking move failed: %s", msg)
             else:
                 logger.debug("Auto-tracking move sent: pan=%.3f°, pitch=%.3f°, speed=%d", 
-                           delta_pan, delta_pitch, AUTO_TRACKING_SPEED)
+                           delta_pan, delta_pitch, speed)
             
             await asyncio.sleep(UPDATE_INTERVAL_SEC)
             
