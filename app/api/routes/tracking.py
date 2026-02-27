@@ -19,7 +19,7 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 # Tracking configuration
 MAX_TRACK_AGE_SEC = 2.0  # Remove tracks older than this
-PREDICTION_LEAD_SEC = 0.5  # 500ms ahead
+PREDICTION_LEAD_SEC = 0.01  # 10ms ahead
 SEND_INTERVAL_SEC = 0.05  # 50ms between sends
 
 # Shared last prediction for backend PTU auto-tracking (primary target only)
