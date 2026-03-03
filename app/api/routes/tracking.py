@@ -48,10 +48,18 @@ def get_last_prediction() -> Optional[Dict[str, float]]:
         return dict(_last_prediction)
 
 
-class KalmanFilter2D:
+# Minimum |omega| to use turning model; below this use straight-line (avoids div by zero)
+_OMEGA_EPS = 1e-6
+
+
+class ExtendedKalmanFilter2D:
     """
-    Constant-velocity Kalman filter for 2D position tracking.
-    State: [x, y, vx, vy]
+    Extended Kalman Filter with Constant Turn Rate and Velocity (CTRV) model.
+    State: [x, y, psi, v, omega]
+    - x, y: position (pixels)
+    - psi: heading (radians), direction of velocity
+    - v: speed (pixels/sec)
+    - omega: turn rate (radians/sec)
     """
 
     def __init__(
@@ -62,50 +70,86 @@ class KalmanFilter2D:
         process_noise: float = 50.0,
         measurement_noise: float = 10.0,
     ):
-        # State: [x, y, vx, vy]
-        self.state = np.array([[x], [y], [0.0], [0.0]], dtype=float)
+        # State: [x, y, psi, v, omega]
+        self.state = np.array([[x], [y], [0.0], [0.0], [0.0]], dtype=float)
         self.dt = dt
 
-        # State transition: x' = x + vx*dt, y' = y + vy*dt, vx' = vx, vy' = vy
-        self.F = np.array([
-            [1, 0, dt, 0],
-            [0, 1, 0, dt],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1],
-        ], dtype=float)
-
-        # Measurement: we observe [x, y]
+        # Measurement: we observe [x, y] only
         self.H = np.array([
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
+            [1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
         ], dtype=float)
 
-        # Process noise covariance (acceleration uncertainty)
-        q = process_noise
-        self.Q = np.array([
-            [q * dt**4 / 4, 0, q * dt**3 / 2, 0],
-            [0, q * dt**4 / 4, 0, q * dt**3 / 2],
-            [q * dt**3 / 2, 0, q * dt**2, 0],
-            [0, q * dt**3 / 2, 0, q * dt**2],
-        ], dtype=float)
+        # Process noise (tuned for pixel coordinates)
+        q_pos = process_noise * dt**2
+        q_psi = 0.1 * dt
+        q_v = 10.0 * dt
+        q_omega = 0.5 * dt
+        self.Q = np.diag([q_pos, q_pos, q_psi, q_v, q_omega]).astype(float)
 
-        # Measurement noise covariance
+        # Measurement noise
         r = measurement_noise
         self.R = np.array([[r, 0], [0, r]], dtype=float)
 
         # State covariance
-        self.P = np.eye(4, dtype=float) * 100.0
+        self.P = np.eye(5, dtype=float) * 100.0
+
+    def _predict_state(self, dt: float) -> None:
+        """Apply CTRV motion model to state (in-place)."""
+        x, y, psi, v, omega = self.state[:, 0]
+        abs_omega = abs(omega)
+        if abs_omega < _OMEGA_EPS:
+            # Straight-line motion
+            self.state[0, 0] = x + v * np.cos(psi) * dt
+            self.state[1, 0] = y + v * np.sin(psi) * dt
+            self.state[2, 0] = psi
+            self.state[3, 0] = v
+            self.state[4, 0] = omega
+        else:
+            # Turning motion
+            self.state[0, 0] = x + (v / omega) * (np.sin(psi + omega * dt) - np.sin(psi))
+            self.state[1, 0] = y + (v / omega) * (-np.cos(psi + omega * dt) + np.cos(psi))
+            self.state[2, 0] = (psi + omega * dt + np.pi) % (2.0 * np.pi) - np.pi
+            self.state[3, 0] = v
+            self.state[4, 0] = omega
+
+    def _compute_jacobian_f(self, dt: float) -> np.ndarray:
+        """Jacobian of state transition w.r.t. state."""
+        x, y, psi, v, omega = self.state[:, 0]
+        abs_omega = abs(omega)
+        if abs_omega < _OMEGA_EPS:
+            # Straight-line: F is constant
+            return np.array([
+                [1, 0, -v * np.sin(psi) * dt, np.cos(psi) * dt, 0],
+                [0, 1, v * np.cos(psi) * dt, np.sin(psi) * dt, 0],
+                [0, 0, 1, 0, 0],
+                [0, 0, 0, 1, 0],
+                [0, 0, 0, 0, 1],
+            ], dtype=float)
+        # Turning: Jacobian of CTRV
+        a13 = (v / omega) * (np.cos(psi + omega * dt) - np.cos(psi))
+        a14 = (1.0 / omega) * (np.sin(psi + omega * dt) - np.sin(psi))
+        a15 = (dt * v / omega) * np.cos(psi + omega * dt) - (v / omega**2) * (
+            np.sin(psi + omega * dt) - np.sin(psi)
+        )
+        a23 = (v / omega) * (np.sin(psi + omega * dt) - np.sin(psi))
+        a24 = (1.0 / omega) * (-np.cos(psi + omega * dt) + np.cos(psi))
+        a25 = (dt * v / omega) * np.sin(psi + omega * dt) - (v / omega**2) * (
+            -np.cos(psi + omega * dt) + np.cos(psi)
+        )
+        return np.array([
+            [1, 0, a13, a14, a15],
+            [0, 1, a23, a24, a25],
+            [0, 0, 1, 0, dt],
+            [0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 1],
+        ], dtype=float)
 
     def predict(self, dt: Optional[float] = None) -> Tuple[float, float]:
         """Predict state ahead. Returns (x, y)."""
         dt_use = dt if dt is not None else self.dt
-        F = np.array([
-            [1, 0, dt_use, 0],
-            [0, 1, 0, dt_use],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1],
-        ], dtype=float)
-        self.state = F @ self.state
+        self._predict_state(dt_use)
+        F = self._compute_jacobian_f(dt_use)
         self.P = F @ self.P @ F.T + self.Q
         return float(self.state[0, 0]), float(self.state[1, 0])
 
@@ -116,13 +160,24 @@ class KalmanFilter2D:
         S = self.H @ self.P @ self.H.T + self.R
         K = self.P @ self.H.T @ np.linalg.inv(S)
         self.state = self.state + K @ y_res
-        self.P = (np.eye(4) - K @ self.H) @ self.P
+        self.P = (np.eye(5) - K @ self.H) @ self.P
         return float(self.state[0, 0]), float(self.state[1, 0])
 
     def predict_ahead(self, lead_seconds: float) -> Tuple[float, float]:
         """Predict position lead_seconds into the future (does not modify state)."""
-        x, y, vx, vy = self.state[:, 0]
-        return float(x + vx * lead_seconds), float(y + vy * lead_seconds)
+        x, y, psi, v, omega = self.state[:, 0]
+        abs_omega = abs(omega)
+        if abs_omega < _OMEGA_EPS:
+            pred_x = x + v * np.cos(psi) * lead_seconds
+            pred_y = y + v * np.sin(psi) * lead_seconds
+        else:
+            pred_x = x + (v / omega) * (np.sin(psi + omega * lead_seconds) - np.sin(psi))
+            pred_y = y + (v / omega) * (-np.cos(psi + omega * lead_seconds) + np.cos(psi))
+        return float(pred_x), float(pred_y)
+
+
+# Alias for backward compatibility
+KalmanFilter2D = ExtendedKalmanFilter2D
 
 
 class BoundingBox(BaseModel):
@@ -287,25 +342,17 @@ def associate_detections_to_tracks(
     return unmatched_detections, tracks
 
 
-def _run_detection_and_tracking(
-    cap: Any,
+def _run_detection_on_frame(
+    frame: Any,
     tracks: Dict[str, Track],
     next_track_id: int,
-) -> Tuple[Any, Dict[str, Track], int, List[Dict[str, Any]]]:
+) -> Tuple[Dict[str, Track], int, List[Dict[str, Any]]]:
     """
-    Run frame capture, YOLO detection, and tracking in a thread.
+    Run YOLO detection and tracking on a given frame.
+    Used by the async pipeline (Thread 2). Caller provides the frame.
 
-    Multi-object mode:
-      - YOLO returns all detections for the frame.
-      - Detections are associated to existing tracks using IoU.
-      - Each track has its own Kalman filter and unique predicted position.
-
-    Returns (cap, tracks, next_track_id, payload_dict).
+    Returns (tracks, next_track_id, payload_dict).
     """
-    cap, frame = get_frame(cap)
-    if frame is None:
-        return cap, tracks, next_track_id, {"timestamp": 0, "balloons": []}
-
     timestamp = time.time()
     frame_height, frame_width = frame.shape[:2]
 
@@ -417,7 +464,9 @@ def _run_detection_and_tracking(
         t = primary_item["track"]
         k = t.kalman
         x, y = float(k.state[0, 0]), float(k.state[1, 0])
-        vx, vy = float(k.state[2, 0]), float(k.state[3, 0])
+        psi, v = float(k.state[2, 0]), float(k.state[3, 0])
+        vx = v * np.cos(psi)
+        vy = v * np.sin(psi)
         pred_cx, pred_cy = primary_item["pred_cx"], primary_item["pred_cy"]
         last_meas = getattr(t, "_last_measurement", (x, y))
         kalman_data = {
@@ -437,19 +486,38 @@ def _run_detection_and_tracking(
         "balloons": [b.model_dump() for b in balloons],
         "kalman": kalman_data,
     }
+    return tracks, next_track_id, payload
+
+
+def _run_detection_and_tracking(
+    cap: Any,
+    tracks: Dict[str, Track],
+    next_track_id: int,
+) -> Tuple[Any, Dict[str, Track], int, List[Dict[str, Any]]]:
+    """
+    Run frame capture, then detection and tracking. Used when pipeline is disabled.
+    Returns (cap, tracks, next_track_id, payload_dict).
+    """
+    cap, frame = get_frame(cap)
+    if frame is None:
+        return cap, tracks, next_track_id, {"timestamp": 0, "balloons": []}
+    tracks, next_track_id, payload = _run_detection_on_frame(frame, tracks, next_track_id)
     return cap, tracks, next_track_id, payload
 
 
 @router.websocket("/ws")
 async def tracking_ws(websocket: WebSocket) -> None:
     """
-    Stream detections with tracking and 500ms-ahead predictions.
-    Sends updates every 50ms for low latency.
-    Detection/tracking runs in a thread pool to avoid blocking the event loop.
+    Stream detections with tracking and predictions.
+    Uses async pipeline (Thread 1: capture, Thread 2: detection, Thread 3: PTU).
+    Sends updates every 50ms from shared result. Falls back to blocking mode if pipeline not running.
     """
+    from app.services import tracking_pipeline
+
     await websocket.accept()
 
-    cap = _create_capture()
+    # Fallback when pipeline not running: use blocking detection
+    cap = None
     tracks: Dict[str, Track] = {}
     next_track_id = 0
 
@@ -457,24 +525,24 @@ async def tracking_ws(websocket: WebSocket) -> None:
         while True:
             loop_start = time.time()
 
-            # Run detection + tracking in thread pool to protect event loop
-            cap, tracks, next_track_id, payload = await asyncio.to_thread(
-                _run_detection_and_tracking,
-                cap,
-                tracks,
-                next_track_id,
-            )
+            if tracking_pipeline.is_pipeline_running():
+                payload = tracking_pipeline.get_latest_result()
+            else:
+                cap = _create_capture() if cap is None else cap
+                if cap is not None:
+                    cap, tracks, next_track_id, payload = await asyncio.to_thread(
+                        _run_detection_and_tracking, cap, tracks, next_track_id
+                    )
+                    if cap is None:
+                        cap = _create_capture()
+                else:
+                    payload = {"timestamp": 0, "balloons": []}
 
-            if view_subscription.should_send_tracking() and (payload["balloons"] or payload["timestamp"] > 0):
+            if payload and view_subscription.should_send_tracking() and (
+                payload.get("balloons") or payload.get("timestamp", 0) > 0
+            ):
                 await websocket.send_json(payload)
 
-            # Recreate capture if lost
-            if cap is None:
-                cap = _create_capture()
-                await asyncio.sleep(0.05)
-                continue
-
-            # Maintain 50ms send interval
             elapsed = time.time() - loop_start
             sleep_time = max(0, SEND_INTERVAL_SEC - elapsed)
             await asyncio.sleep(sleep_time)
@@ -482,4 +550,5 @@ async def tracking_ws(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        _release_capture(cap)
+        if not tracking_pipeline.is_pipeline_running() and cap is not None:
+            _release_capture(cap)

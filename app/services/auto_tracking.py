@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 # Auto-tracking speed tiers by pixel distance from center (distance = error_px)
-MAX_PTU_SPEED = 10000
-MIN_PTU_SPEED = 6000
+MAX_PTU_SPEED = 6000
+MIN_PTU_SPEED = 1500
 
 def _get_speed_from_distance(distance_px: float, width: float) -> int:
     """Return PTU speed based on pixel distance between prediction point and center."""
@@ -42,7 +42,7 @@ def _get_step_from_distance(distance_px: float, width: float) -> float:
     if width <= 0:
         return MAX_STEP_DEG
     # Normalize distance: 0 at center, 1 at width/4 (same reference as speed)
-    norm = min(distance_px / (width / 4), 1.0)
+    norm = min(distance_px / (width / 2), 1.0)
     return MIN_STEP_DEG + norm * (MAX_STEP_DEG - MIN_STEP_DEG)
 
 UPDATE_INTERVAL_SEC = 0.1  # Check every 100ms
