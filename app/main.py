@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import camera, config, ptu, stream, tracking, view_subscription
 from app.core.config import get_settings
-from app.services import auto_tracking, config as config_service, joystick as joystick_service
+from app.services import config as config_service, joystick as joystick_service
 from app.services import ptu as ptu_service
+from app.services import tracking_pipeline
 
 # Mitigate FFmpeg threading issues with RTSP
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp|threads;1"
@@ -16,15 +17,14 @@ os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp|threads;1"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # On startup, if auto-tracking was enabled in DB, start loop
-    if config_service.get_auto_tracking():
-        await auto_tracking.start_auto_tracking()
+    # Start async pipeline: Thread 1 (capture), Thread 2 (detection), Thread 3 (PTU control)
+    tracking_pipeline.start_pipeline()
     # Start joystick control thread (active when auto-tracking is off)
     joystick_service.start_joystick()
     yield
-    # On shutdown, stop joystick, auto-tracking, and disconnect PTU
+    # On shutdown, stop pipeline, joystick, and disconnect PTU
+    tracking_pipeline.stop_pipeline()
     joystick_service.stop_joystick()
-    await auto_tracking.stop_auto_tracking()
     ptu_service.disconnect()
 
 

@@ -12,11 +12,39 @@ from app.services.camera import get_resolution
 
 logger = logging.getLogger(__name__)
 
+
+# Auto-tracking speed tiers by pixel distance from center (distance = error_px)
+MAX_PTU_SPEED = 10000
+MIN_PTU_SPEED = 100
+
+def _get_speed_from_distance(distance_px: float, width: float) -> int:
+    """Return PTU speed based on pixel distance between prediction point and center."""
+    if width <= 0:
+        return MAX_PTU_SPEED
+
+    # Normalize distance (0 to 1)
+    norm = min(distance_px / (width / 3), 1.0)
+
+    # Linear interpolation
+    speed = MIN_PTU_SPEED + norm * (MAX_PTU_SPEED - MIN_PTU_SPEED)
+
+    return int(speed)
+
+
 # Auto-tracking configuration
 DEFAULT_HFOV_DEG = 60.0  # Horizontal field of view in degrees
 DEADBAND_PX = 5.0  # Don't move if error is smaller than this (pixels)
-MAX_STEP_DEG = 2.0  # Maximum step per update in degrees
-AUTO_TRACKING_SPEED = 1000  # PTU speed for auto-tracking moves
+MAX_STEP_DEG = 15.0  # Maximum step per update in degrees (at large distance)
+MIN_STEP_DEG = 0  # Minimum step per update in degrees (at small distance)
+
+def _get_step_from_distance(distance_px: float, width: float) -> float:
+    """Return step size (degrees) from linear scale based on pixel distance from center."""
+    if width <= 0:
+        return MAX_STEP_DEG
+    # Normalize distance: 0 at center, 1 at width/4 (same reference as speed)
+    norm = min(distance_px / (width / 3), 1.0)
+    return MIN_STEP_DEG + norm * (MAX_STEP_DEG - MIN_STEP_DEG)
+
 UPDATE_INTERVAL_SEC = 0.1  # Check every 100ms
 PREDICTION_LEAD_SEC = 0.5  # 500ms ahead prediction
 # PTU axis inversion
@@ -87,10 +115,11 @@ async def _run_auto_tracking_loop() -> None:
             delta_pan = error_x * deg_per_px_x
             delta_pitch = error_y * deg_per_px_y
             
-            # Limit step size
+            # Limit step size - max step scales linearly with distance (like speed)
+            max_step = _get_step_from_distance(error_px, width)
             mag = (delta_pan**2 + delta_pitch**2) ** 0.5
-            if mag > MAX_STEP_DEG:
-                scale = MAX_STEP_DEG / mag
+            if mag > max_step:
+                scale = max_step / mag
                 delta_pan *= scale
                 delta_pitch *= scale
             
@@ -108,13 +137,16 @@ async def _run_auto_tracking_loop() -> None:
                 pred_x, pred_y, center_x, center_y, error_x, error_y, delta_pan, delta_pitch
             )
             
-            # Move PTU
-            success, msg = ptu_service.move_relative(delta_pan, delta_pitch, AUTO_TRACKING_SPEED)
+            # Move PTU - speed varies by pixel distance from center
+            speed = _get_speed_from_distance(error_px, width)
+            success, msg = ptu_service.move_relative(delta_pan, delta_pitch, speed)
             if not success:
                 logger.warning("Auto-tracking move failed: %s", msg)
             else:
-                logger.debug("Auto-tracking move sent: pan=%.3f°, pitch=%.3f°, speed=%d", 
-                           delta_pan, delta_pitch, AUTO_TRACKING_SPEED)
+                logger.debug(
+                    "Auto-tracking move sent: pan=%.3f°, pitch=%.3f°, speed=%d, step_max=%.2f° (dist=%.1f px)",
+                    delta_pan, delta_pitch, speed, max_step, error_px
+                )
             
             await asyncio.sleep(UPDATE_INTERVAL_SEC)
             

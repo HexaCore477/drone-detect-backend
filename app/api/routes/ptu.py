@@ -65,7 +65,7 @@ def ptu_connect(body: ConnectBody):
 @router.post("/move/absolute")
 def move_absolute(body: MoveBody):
     """Move PTU to absolute position (degrees). Sends H51,azimuth_pulse,pitch_pulse,speedE."""
-    speed = body.speed if body.speed is not None else ptu_service.DEFAULT_SPEED_PTU
+    speed = body.speed if body.speed is not None else ptu_service.get_default_speed_ptu()
     success, message = ptu_service.move_absolute(body.pan, body.tilt, speed)
     if not success:
         raise HTTPException(status_code=500, detail=message)
@@ -75,7 +75,7 @@ def move_absolute(body: MoveBody):
 @router.post("/move/relative")
 def move_relative(body: MoveBody):
     """Move PTU relative to current position (degrees). Sends H52,delta_az,delta_pt,speedE."""
-    speed = body.speed if body.speed is not None else ptu_service.DEFAULT_SPEED_PTU
+    speed = body.speed if body.speed is not None else ptu_service.get_default_speed_ptu()
     success, message = ptu_service.move_relative(body.pan, body.tilt, speed)
     if not success:
         raise HTTPException(status_code=500, detail=message)

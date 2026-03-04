@@ -1,5 +1,6 @@
 """PTU (Pan-Tilt Unit) service - serial port listing and move commands."""
 import logging
+import os
 import queue
 import re
 import threading
@@ -14,7 +15,28 @@ logger = logging.getLogger(__name__)
 # Pulse <-> degree conversion: angle = pulse × 0.0009375
 PULSE_TO_DEG = 0.0009375
 DEG_TO_PULSE = 1.0 / PULSE_TO_DEG
-DEFAULT_SPEED_PTU = 4000
+
+
+def _get_default_speed_ptu() -> int:
+    """PTU speed for move_absolute/move_relative. From DEFAULT_SPEED_PTU in .env."""
+    try:
+        return int(os.getenv("DEFAULT_SPEED_PTU", "10000"))
+    except (TypeError, ValueError):
+        return 10000
+
+
+def _get_direction_speed_default() -> int:
+    """PTU speed for direction commands. From DIRECTION_SPEED_DEFAULT in .env."""
+    try:
+        return int(os.getenv("DIRECTION_SPEED_DEFAULT", "2000"))
+    except (TypeError, ValueError):
+        return 2000
+
+
+def get_default_speed_ptu() -> int:
+    """Public accessor for API routes."""
+    return _get_default_speed_ptu()
+
 
 # move_absolute: H51,<azimuth_pulse>,<pitch_pulse>,<speed_ptu>E
 # move_relative: H52,<delta_azimuth_pulse>,<delta_pitch_pulse>,<speed_ptu>E
@@ -22,16 +44,15 @@ DEFAULT_SPEED_PTU = 4000
 # H20E → get pitch (A2) in pulses
 
 # Direction command templates: H61/H62/H63/H64 use speed; H60 uses az_dir,pitch_dir,speed; H65 is pause
-DIRECTION_SPEED_DEFAULT = 2000
 DIRECTION_COMMANDS: dict[str, bytes] = {
-    "left": b"H61,1000E",
-    "right": b"H62,1000E",
-    "up": b"H63,1000E",
-    "down": b"H64,1000E",
-    "right-up": b"H60,-1,1,1000E",
-    "left-down": b"H60,1,-1,1000E",
-    "right-down": b"H60,-1,-1,1000E",
-    "left-up": b"H60,1,1,1000E",
+    "left": b"H61,2000E",
+    "right": b"H62,2000E",
+    "up": b"H63,2000E",
+    "down": b"H64,2000E",
+    "right-up": b"H60,-1,1,2000E",
+    "left-down": b"H60,1,-1,2000E",
+    "right-down": b"H60,-1,-1,2000E",
+    "left-up": b"H60,1,1,2000E",
     "pause": b"H65E",
 }
 
@@ -173,8 +194,8 @@ def _serial_worker() -> None:
                             pass
                     elif cmd[0] == "direction":
                         direction_name = cmd[1]
-                        speed = cmd[2] if len(cmd) >= 3 else DIRECTION_SPEED_DEFAULT
-                        print(f"direction_name: {direction_name}, speed: {speed}")
+                        speed = cmd[2] if len(cmd) >= 3 else _get_direction_speed_default()
+                        #print(f"direction_name: {direction_name}, speed: {speed}")
                         if direction_name not in DIRECTION_COMMANDS:
                             raise ValueError(f"Unknown direction: {direction_name}")
                         payload = _build_direction_payload(direction_name, speed)
@@ -235,12 +256,13 @@ def _drop_old_move_commands() -> None:
         _command_queue.put(item)
 
 
-def move_absolute(pan: float, tilt: float, speed: int = DEFAULT_SPEED_PTU) -> tuple[bool, str]:
+def move_absolute(pan: float, tilt: float, speed: int | None = None) -> tuple[bool, str]:
     """
     Move PTU to absolute position (degrees).
     Sends H51,<azimuth_pulse>,<pitch_pulse>,<speed_ptu>E
     Returns (success, message). Command is queued for worker thread.
     """
+    speed = speed if speed is not None else _get_default_speed_ptu()
     try:
         if _connected_port:
             _enqueue(("move_absolute", pan, tilt, speed))
@@ -250,12 +272,13 @@ def move_absolute(pan: float, tilt: float, speed: int = DEFAULT_SPEED_PTU) -> tu
         return False, str(e)
 
 
-def move_relative(pan_delta: float, tilt_delta: float, speed: int = DEFAULT_SPEED_PTU) -> tuple[bool, str]:
+def move_relative(pan_delta: float, tilt_delta: float, speed: int | None = None) -> tuple[bool, str]:
     """
     Move PTU relative to current position (degrees).
     Sends H52,<delta_azimuth_pulse>,<delta_pitch_pulse>,<speed_ptu>E
     Returns (success, message). Command is queued for worker thread.
     """
+    speed = speed if speed is not None else _get_default_speed_ptu()
     try:
         if _connected_port:
             _enqueue(("move_relative", pan_delta, tilt_delta, speed))

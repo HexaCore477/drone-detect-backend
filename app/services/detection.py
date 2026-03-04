@@ -1,7 +1,20 @@
-"""YOLO-based balloon detection service."""
+"""YOLO-based balloon and drone detection service.
+
+Switch between modes via DRONE_DETECTION_ENABLED in .env:
+- true: use best_drone_nano.pt for drone detection
+- false: use best_balloon_nano.pt for balloon detection (with color)
+"""
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+# Ensure .env is loaded when this module is used (e.g. before getenv)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from typing import Any, Dict, List, Literal
 
 import cv2
@@ -13,34 +26,26 @@ try:
 except ImportError:  # pragma: no cover - runtime dependency
     YOLO = None  # type: ignore[assignment]
 
-_MODEL: "YOLO | None" = None
+_BALLOON_MODEL: "YOLO | None" = None
+_DRONE_MODEL: "YOLO | None" = None
 
 
-def _get_model() -> "YOLO":
-    """
-    Lazily load the YOLO model from app/yolo_models/best_balloon_nano.pt.
-    
-    The model is kept in a module-level singleton so we only pay the load cost once.
-    """
-    global _MODEL
-    if _MODEL is not None:
-        return _MODEL
+def _is_drone_detection() -> bool:
+    """Return True if DRONE_DETECTION_ENABLED is true in .env."""
+    val = os.getenv("DRONE_DETECTION_ENABLED", "false").strip().lower()
+    return val in ("true", "1", "yes")
 
+
+def _load_model(model_path: Path) -> "YOLO":
+    """Load YOLO model from path with torch.load patched for weights_only."""
     if YOLO is None:
         raise RuntimeError(
             "ultralytics is not installed. Install with `pip install ultralytics` "
             "and ensure PyTorch is available."
         )
-    
-    # Path: backend/app/services/detection.py -> backend/app/yolo_models/
-    # Go up one level from services/ to app/, then into yolo_models/
-    model_path = Path(__file__).resolve().parent.parent / "yolo_models" / "best_balloon_nano.pt"
     if not model_path.is_file():
         raise FileNotFoundError(f"YOLO model not found at: {model_path}")
 
-    # PyTorch 2.6+ uses weights_only=True by default; Ultralytics checkpoints
-    # contain custom classes that trigger UnpicklingError. We trust our model
-    # file, so temporarily use weights_only=False for loading.
     _original_torch_load = torch.load
     try:
         def _patched_load(*args, **kwargs):
@@ -48,11 +53,29 @@ def _get_model() -> "YOLO":
             return _original_torch_load(*args, **kwargs)
 
         torch.load = _patched_load
-        _MODEL = YOLO(str(model_path))
+        return YOLO(str(model_path))
     finally:
         torch.load = _original_torch_load
 
-    return _MODEL
+
+def _get_balloon_model() -> "YOLO":
+    """Lazily load balloon model from best_balloon_nano.pt."""
+    global _BALLOON_MODEL
+    if _BALLOON_MODEL is not None:
+        return _BALLOON_MODEL
+    model_path = Path(__file__).resolve().parent.parent / "yolo_models" / "best_balloon_nano.pt"
+    _BALLOON_MODEL = _load_model(model_path)
+    return _BALLOON_MODEL
+
+
+def _get_drone_model() -> "YOLO":
+    """Lazily load drone model from best_drone_nano.pt."""
+    global _DRONE_MODEL
+    if _DRONE_MODEL is not None:
+        return _DRONE_MODEL
+    model_path = Path(__file__).resolve().parent.parent / "yolo_models" / "best_drone_nano.pt"
+    _DRONE_MODEL = _load_model(model_path)
+    return _DRONE_MODEL
 
 
 # Class names that count as "red" (case-insensitive) - used only if model has color classes
@@ -170,17 +193,10 @@ def detect_color_from_roi(
 
 def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
     """
-    Run YOLO detection and return **all** detected balloons.
-    
-    Each detection dict contains:
-      - bbox_x, bbox_y, bbox_w, bbox_h
-      - centerX, centerY
-      - confidence
-    
-    Tracking logic is responsible for associating detections to tracks and
-    deciding which object to follow.
+    Run YOLO balloon detection and return **all** detected balloons.
+    Uses best_balloon_nano.pt with pixel-based color classification.
     """
-    model = _get_model()
+    model = _get_balloon_model()
     results = model(frame, verbose=False, conf=0.45, iou=0.5)
     boxes = results[0].boxes
     names = model.names  # class_id -> class_name
@@ -219,3 +235,82 @@ def detect_balloons(frame: "cv2.Mat") -> List[Dict[str, Any]]:
         )
 
     return detections
+
+
+# Drone detection: lower confidence (drones often small/distant), standard imgsz
+# Override via DRONE_CONF_THRESHOLD in .env (e.g. 0.2 for very small drones)
+def _get_drone_conf() -> float:
+    try:
+        return float(os.getenv("DRONE_CONF_THRESHOLD", "0.25"))
+    except (TypeError, ValueError):
+        return 0.25
+
+
+DRONE_IOU_THRESHOLD = 0.5
+DRONE_IMGSZ = 640
+
+
+def detect_drones(frame: "cv2.Mat") -> List[Dict[str, Any]]:
+    """
+    Run YOLO drone detection and return **all** detected drones.
+    Uses best_drone_nano.pt. No color classification (drones use class name).
+    Lower confidence threshold for small/distant drones.
+    """
+    model = _get_drone_model()
+    results = model(
+        frame,
+        verbose=False,
+        conf=_get_drone_conf(),
+        iou=DRONE_IOU_THRESHOLD,
+        imgsz=DRONE_IMGSZ,
+    )
+    boxes = results[0].boxes
+    if boxes is None:
+        return []
+
+    names = model.names  # class_id -> class_name
+    detections: List[Dict[str, Any]] = []
+
+    for box in boxes:
+        x1, y1, x2, y2 = box.xyxy[0].tolist()
+        w = x2 - x1
+        h = y2 - y1
+        if w <= 0 or h <= 0:
+            continue
+
+        cls_id = int(box.cls[0].item())
+        if isinstance(names, dict):
+            class_name = names.get(cls_id, "drone")
+        else:
+            class_name = names[cls_id] if 0 <= cls_id < len(names) else "drone"
+
+        # Drone mode: use class name as color for API compatibility; no pixel-based color
+        color = class_name.lower() if class_name else "drone"
+
+        detections.append(
+            {
+                "bbox_x": float(x1),
+                "bbox_y": float(y1),
+                "bbox_w": float(w),
+                "bbox_h": float(h),
+                "centerX": float(x1 + w / 2.0),
+                "centerY": float(y1 + h / 2.0),
+                "confidence": float(box.conf[0].item()),
+                "class_name": class_name,
+                "color": color,
+                "is_red": False,  # No red prioritization for drones
+            }
+        )
+
+    return detections
+
+
+def detect_objects(frame: "cv2.Mat") -> List[Dict[str, Any]]:
+    """
+    Run detection based on DRONE_DETECTION_ENABLED flag.
+    - true: drone detection (best_drone_nano.pt)
+    - false: balloon detection (best_balloon_nano.pt)
+    """
+    if _is_drone_detection():
+        return detect_drones(frame)
+    return detect_balloons(frame)
