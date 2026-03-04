@@ -19,7 +19,7 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 # Tracking configuration
 MAX_TRACK_AGE_SEC = 2.0  # Remove tracks older than this
-PREDICTION_LEAD_SEC = 0  # 10ms ahead
+PREDICTION_LEAD_SEC = 0.01  # 10ms ahead
 SEND_INTERVAL_SEC = 0.05  # 50ms between sends
 
 # Shared last prediction for backend PTU auto-tracking (primary target only)
@@ -38,6 +38,13 @@ def set_last_prediction(x: float, y: float, width: int, height: int, timestamp: 
             "height": float(height),
             "timestamp": float(timestamp),
         }
+
+
+def clear_last_prediction() -> None:
+    """Clear last prediction when no target is detected. PTU will stop."""
+    global _last_prediction
+    with _last_prediction_lock:
+        _last_prediction = None
 
 
 def get_last_prediction() -> Optional[Dict[str, float]]:
@@ -454,6 +461,9 @@ def _run_detection_on_frame(
             int(primary_pred["height"]),
             timestamp,
         )
+    else:
+        # No target detected - clear prediction so PTU stops
+        clear_last_prediction()
 
     # Alert email: send when balloon count/color state changes and is stable for 5 frames
     process_balloon_detection(timestamp, track_items)

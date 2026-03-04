@@ -195,7 +195,7 @@ def _serial_worker() -> None:
                     elif cmd[0] == "direction":
                         direction_name = cmd[1]
                         speed = cmd[2] if len(cmd) >= 3 else _get_direction_speed_default()
-                        print(f"direction_name: {direction_name}, speed: {speed}")
+                        #print(f"direction_name: {direction_name}, speed: {speed}")
                         if direction_name not in DIRECTION_COMMANDS:
                             raise ValueError(f"Unknown direction: {direction_name}")
                         payload = _build_direction_payload(direction_name, speed)

@@ -110,6 +110,8 @@ def _ptu_control_loop() -> None:
 
             pred = _get_last_prediction_from_pipeline()
             if pred is None:
+                # No target detected - stop PTU movement
+                ptu_service.direction("pause")
                 continue
 
             pred_x = pred["x"]

@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 # Auto-tracking speed tiers by pixel distance from center (distance = error_px)
-MAX_PTU_SPEED = 6000
-MIN_PTU_SPEED = 1500
+MAX_PTU_SPEED = 10000
+MIN_PTU_SPEED = 100
 
 def _get_speed_from_distance(distance_px: float, width: float) -> int:
     """Return PTU speed based on pixel distance between prediction point and center."""
@@ -23,7 +23,7 @@ def _get_speed_from_distance(distance_px: float, width: float) -> int:
         return MAX_PTU_SPEED
 
     # Normalize distance (0 to 1)
-    norm = min(distance_px / (width / 2), 1.0)
+    norm = min(distance_px / (width / 3), 1.0)
 
     # Linear interpolation
     speed = MIN_PTU_SPEED + norm * (MAX_PTU_SPEED - MIN_PTU_SPEED)
@@ -34,15 +34,15 @@ def _get_speed_from_distance(distance_px: float, width: float) -> int:
 # Auto-tracking configuration
 DEFAULT_HFOV_DEG = 60.0  # Horizontal field of view in degrees
 DEADBAND_PX = 5.0  # Don't move if error is smaller than this (pixels)
-MAX_STEP_DEG = 5.0  # Maximum step per update in degrees (at large distance)
-MIN_STEP_DEG = 1.0  # Minimum step per update in degrees (at small distance)
+MAX_STEP_DEG = 15.0  # Maximum step per update in degrees (at large distance)
+MIN_STEP_DEG = 0  # Minimum step per update in degrees (at small distance)
 
 def _get_step_from_distance(distance_px: float, width: float) -> float:
     """Return step size (degrees) from linear scale based on pixel distance from center."""
     if width <= 0:
         return MAX_STEP_DEG
     # Normalize distance: 0 at center, 1 at width/4 (same reference as speed)
-    norm = min(distance_px / (width / 2), 1.0)
+    norm = min(distance_px / (width / 3), 1.0)
     return MIN_STEP_DEG + norm * (MAX_STEP_DEG - MIN_STEP_DEG)
 
 UPDATE_INTERVAL_SEC = 0.1  # Check every 100ms
