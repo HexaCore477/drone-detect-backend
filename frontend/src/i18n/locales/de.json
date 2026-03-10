@@ -1,0 +1,277 @@
+{
+  "header": {
+    "title": "BALLON-VERFOLGUNGSSYSTEM",
+    "subtitle": "PTU-Steuerungsschnittstelle v1.0",
+    "latency": "Latenz",
+    "branding": "SkyLANX - Laserbasiertes C-UAS-System SKL 2KW"
+  },
+  "tabs": {
+    "operational": "BETRIEB",
+    "waterfall": "WASSERFALL"
+  },
+  "time": {
+    "utc": "UTC",
+    "local": "LOKAL"
+  },
+  "status": {
+    "sys": "SYS",
+    "cam": "KAM",
+    "ptu": "PTU",
+    "online": "ONLINE",
+    "offline": "OFFLINE",
+    "connected": "VERBUNDEN",
+    "disconnected": "GETRENNT"
+  },
+  "cameraZoom": {
+    "title": "Kamera-Zoom",
+    "connectForZoom": "Kamera für Zoomsteuerung verbinden",
+    "zoomIn": "Kamera Zoom heran",
+    "zoomOut": "Kamera Zoom heraus",
+    "connected": "Verbunden",
+    "connectedDesc": "Kamera-Zoomsteuerung bereit",
+    "connectFailed": "Verbindung fehlgeschlagen",
+    "zoomFailed": "Zoom fehlgeschlagen"
+  },
+  "scenario": {
+    "title": "AKTIVES SZENARIO",
+    "scene": "SZENE",
+    "distance": "DIST",
+    "zoom": "ZOOM",
+    "config": "SZENARIO-KONFIGURATION",
+    "deadband": "Totzone",
+    "maxRate": "Max. Rate",
+    "maxStep": "Max. Schritt",
+    "latency": "Latenz"
+  },
+  "camera": {
+    "title": "KAMERABILD",
+    "feed": "KAMERABILD",
+    "connecting": "Verbinden...",
+    "waitingFrame": "Warte auf erstes Bild...",
+    "retry": "Erneut versuchen",
+    "trackingActive": "Verfolgung Aktiv",
+    "trackingIdle": "Verfolgung Inaktiv",
+    "mode": "MODUS",
+    "auto": "AUTO",
+    "manual": "MANUELL",
+    "kf": "KF",
+    "on": "AN",
+    "off": "AUS",
+    "predicted": "{{id}} vorhergesagt (500ms)"
+  },
+  "ptu": {
+    "title": "PTU-STATUS",
+    "control": "PTU-STEUERUNG",
+    "azimuth": "Azimut",
+    "pitch": "Neigung",
+    "angles": "PTU-Winkel",
+    "actual": "Aktuell",
+    "target": "ZIEL",
+    "error": "FEHLER",
+    "serialPort": "Serieller Port",
+    "loadingPorts": "Laden...",
+    "selectPort": "Port wählen",
+    "noPorts": "Keine Ports gefunden",
+    "refreshPorts": "Aktualisieren",
+    "refreshPosition": "Position aktualisieren",
+    "baudRate": "Baudrate",
+    "serialConnection": "Serielle Verbindung",
+    "connect": "Verbinden",
+    "disconnect": "Trennen",
+    "controlSection": "Steuerung",
+    "autoTracking": "Automatische Objektverfolgung",
+    "manualControl": "Manuelle Steuerung",
+    "active": "(Aktiv)",
+    "error": {
+      "fetchPorts": "Serielle Ports konnten nicht abgerufen werden",
+      "connect": "Verbindung fehlgeschlagen",
+      "disconnect": "Trennung fehlgeschlagen",
+      "direction": "PTU-Befehl fehlgeschlagen",
+      "noPort": "Kein Port ausgewählt",
+      "noPortDesc": "Bitte wählen Sie einen seriellen Port aus, bevor Sie sich verbinden",
+      "notConnected": "Nicht verbunden",
+      "notConnectedDesc": "Bitte verbinden Sie sich mit dem PTU, bevor Sie Befehle senden"
+    },
+    "success": {
+      "connected": "Verbunden",
+      "connectedDesc": "Erfolgreich mit PTU auf verbunden",
+      "disconnected": "Getrennt",
+      "disconnectedDesc": "PTU-Verbindung geschlossen"
+    }
+  },
+  "kalman": {
+    "title": "KALMAN-FILTER",
+    "status": "Status",
+    "mode": "Modus",
+    "enabled": "AKTIVIERT",
+    "disabled": "DEAKTIVIERT",
+    "predict": "VORHERSAGE",
+    "update": "AKTUALISIERUNG",
+    "gating": "Gating",
+    "active": "AKTIV",
+    "inactive": "INAKTIV",
+    "lastUpdate": "Letzte Aktualisierung",
+    "stateVector": "Zustandsvektor",
+    "filterMode": "FILTERMODUS",
+    "predicting": "VORHERSAGE",
+    "updating": "AKTUALISIERUNG",
+    "rejecting": "ABLEHNUNG",
+    "passing": "DURCHLASS",
+    "stateCovariance": "ZUSTANDSKOVARIANZ",
+    "leadTime": "Vorlaufzeit (T)",
+    "leadVector": "VORLAUFVEKTOR"
+  },
+  "target": {
+    "title": "ZIELERFASSUNG",
+    "totalDetected": "Gesamt erkannt",
+    "redHostile": "Rot (Feindlich)",
+    "activeTarget": "Aktives Ziel",
+    "priorityQueue": "Ziel-Prioritätswarteschlange",
+    "noHostile": "Keine feindlichen Ziele",
+    "large": "GRO",
+    "medium": "MIT",
+    "small": "KLN",
+    "tgt": "ZIL"
+  },
+  "tracking": {
+    "metricsTitle": "VERFOLGUNGSMETRIKEN",
+    "limitsTitle": "STEUERUNGSGRENZEN",
+    "centerError": "Zentrierfehler",
+    "trackQuality": "Verfolgungsqualität",
+    "updateRate": "Aktualisierungsrate",
+    "procTime": "Verarbeitungszeit",
+    "maxVelocity": "Max. Geschw.",
+    "deadband": "Totzone",
+    "latencyComp": "Latenzkompensation",
+    "accel": "Beschl.",
+    "latency": "Latenz",
+    "latencyMs": "Round-trip"
+  },
+  "logs": {
+    "title": "SYSTEMPROTOKOLLE",
+    "all": "Alle",
+    "detection": "Erkennung",
+    "tracking": "Verfolgung",
+    "ptuLog": "PTU",
+    "kalmanLog": "Kalman",
+    "noLogs": "Keine Protokolle verfügbar"
+  },
+  "waterfall": {
+    "systemTransparency": "Systemtransparenz-Ansicht",
+    "systemLogs": "SYSTEMPROTOKOLLE",
+    "ptuState": "PTU-ZUSTAND",
+    "kalmanState": "KALMAN-ZUSTAND",
+    "detectionEvents": "ERKENNUNGSEREIGNISSE",
+    "trackingStatus": "VERFOLGUNGSSTATUS",
+    "kalmanFilterLog": "KALMAN-FILTER-PROTOKOLL",
+    "predictionState": "VORHERSAGEZUSTAND",
+    "latencyCompensation": "LATENZKOMPENSATION",
+    "ptuCommands": "PTU-BEFEHLE",
+    "systemLog": "SYSTEMPROTOKOLL",
+    "panAxis": "PAN-ACHSE",
+    "tiltAxis": "TILT-ACHSE"
+  },
+  "emitter": {
+    "title": "EMITTER-STATUS",
+    "panOffset": "Pan-Offset",
+    "tiltOffset": "Tilt-Offset",
+    "focus": "Fokus",
+    "power": "Leistung"
+  },
+  "mode": {
+    "title": "BETRIEBSMODUS",
+    "humanInTheLoop": "Mensch-im-Kreis",
+    "humanOnTheLoop": "Mensch-auf-dem-Kreis",
+    "humanOutOfTheLoop": "Mensch-außerhalb-des-Kreises",
+    "hitl": "HITL",
+    "hotl": "HOTL",
+    "hool": "HOOL"
+  },
+  "laser": {
+    "title": "Laser",
+    "status": "Status",
+    "on": "An",
+    "off": "Aus",
+    "power": "Leistung",
+    "frequency": "Frequenz"
+  },
+  "cooling": {
+    "title": "Wasserkühlung",
+    "status": "Status",
+    "on": "An",
+    "off": "Aus",
+    "temp": "Aktuell",
+    "threshold": "Schwellenwert"
+  },
+  "battery": {
+    "title": "Batterie",
+    "capacity": "Kapazität",
+    "percent": "Ladung",
+    "chargeTime": "Geschätzte Ladezeit"
+  },
+  "environment": {
+    "title": "Umgebung",
+    "temp": "Temperatur",
+    "pressure": "Luftdruck",
+    "humidity": "Luftfeuchtigkeit",
+    "windSpeed": "Windgeschwindigkeit",
+    "windDir": "Windrichtung",
+    "weather": "Bedingungen"
+  },
+  "platform": {
+    "title": "Plattform",
+    "roll": "Rollen",
+    "pitch": "Nicken",
+    "yaw": "Gieren",
+    "geo": "Position",
+    "gps": "GPS"
+  },
+  "systemControl": {
+    "laserState": "Laserzustand",
+    "laser": {
+      "enabled": "Aktiviert",
+      "interlock": "Verriegelung",
+      "temp": "Temperatur",
+      "alarms": "Alarme"
+    },
+    "cooling": {
+      "onOff": "Ein/Aus",
+      "currentTemp": "Aktuelle Temp",
+      "alarm": "Alarm"
+    },
+    "battery": {
+      "alarms": "Alarme"
+    },
+    "prediction": "Vorhersagezustand",
+    "latency": "Latenzkompensation",
+    "ptuState": "PTU-Zustand",
+    "ptu": {
+      "limits": "Grenzen",
+      "faults": "Fehler"
+    },
+    "camera": "Kamerazustand",
+    "camera.zoom": "Zoom",
+    "camera.focus": "Fokus",
+    "camera.auto": "Auto",
+    "camera.link": "Videolink",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "switchOn": "Einschalten",
+    "switchOff": "Ausschalten",
+    "ok": "OK",
+    "open": "Offen",
+    "setOpen": "Auf Offen setzen",
+    "setOk": "Auf OK setzen",
+    "yes": "Ja",
+    "no": "Nein",
+    "none": "Keine",
+    "alarm": "Hohe Temperatur",
+    "clearAlarm": "Alarm löschen",
+    "raiseAlarm": "Alarm auslösen",
+    "lowBattery": "Niedriger Batteriestand",
+    "nominal": "Nominal",
+    "offline": "Offline",
+    "clearFault": "Fehler löschen",
+    "raiseFault": "Fehler auslösen"
+  }
+}
