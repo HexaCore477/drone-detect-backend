@@ -14,7 +14,6 @@ from app.services.alert_mail import process_balloon_detection
 from app.services.camera import _create_capture, _release_capture
 from app.services.detection import detect_objects
 from app.services import view_subscription
-from app.services import tracking_pipeline
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
@@ -354,7 +353,7 @@ def _run_detection_on_frame(
     frame: Any,
     tracks: Dict[str, Track],
     next_track_id: int,
-) -> Tuple[Dict[str, Track], int, List[Dict[str, Any]]]:
+) -> Tuple[Dict[str, Track], int, Dict[str, Any]]:
     """
     Run YOLO detection and tracking on a given frame.
     Used by the async pipeline (Thread 2). Caller provides the frame.
@@ -504,15 +503,16 @@ def _run_detection_and_tracking(
     cap: Any,
     tracks: Dict[str, Track],
     next_track_id: int,
-) -> Tuple[Any, Dict[str, Track], int, List[Dict[str, Any]]]:
+) -> Tuple[Any, Dict[str, Track], int, Dict[str, Any]]:
     """
     Run frame capture, then detection and tracking. Used when pipeline is disabled.
     Returns (cap, tracks, next_track_id, payload_dict).
     """
+    from app.services import tracking_pipeline
     frame = tracking_pipeline.get_current_frame_for_stream()
     if frame is None:
         return cap, tracks, next_track_id, {"timestamp": 0, "balloons": []}
-        
+       
     tracks, next_track_id, payload = _run_detection_on_frame(frame, tracks, next_track_id)
     return cap, tracks, next_track_id, payload
 
@@ -562,5 +562,6 @@ async def tracking_ws(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        if not tracking_pipeline.is_pipeline_running() and cap is not None:
+        from app.services import tracking_pipeline as _tp
+        if not _tp.is_pipeline_running() and cap is not None:
             _release_capture(cap)

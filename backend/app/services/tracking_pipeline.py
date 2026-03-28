@@ -13,7 +13,6 @@ from typing import Any, Dict, Optional
 
 import cv2
 from app.services.camera import _create_capture, _release_capture
-from app.api.routes.tracking import _run_detection_on_frame
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +64,7 @@ def _capture_loop() -> None:
 
 def _detection_loop() -> None:
     """Thread 2: Run detection on frames from buffer, update shared target position."""
+    from app.api.routes.tracking import _run_detection_on_frame
     global _latest_result, _current_frame
     tracks: Dict = {}
     next_track_id = 0
