@@ -11,9 +11,8 @@ from app.services import config as config_service, joystick as joystick_service
 from app.services import ptu as ptu_service
 from app.services import tracking_pipeline
 
-# Mitigate FFmpeg threading issues with RTSP
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp|threads;1"
-
+# CRITICAL: Disable all FFmpeg buffering and force UDP
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp|fflags;nobuffer|flags;low_delay|strict;experimental"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
