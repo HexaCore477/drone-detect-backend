@@ -13,6 +13,13 @@ interface CameraViewProps {
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 720;
 
+function getStreamWsUrl(): string {
+  const host = window.location.hostname;
+  const port = import.meta.env.DEV ? '8000' : window.location.port || '8000';
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${protocol}://${host}:${port}/api/stream/ws`;
+}
+
 export function CameraView({ 
   balloons,
   centerX: centerXProp,
@@ -20,15 +27,12 @@ export function CameraView({
   showCrosshair = true 
 }: CameraViewProps) {
   const { t } = useTranslation();
-  const [retryKey, setRetryKey] = useState(0);
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null);
 
   const imgRef = useRef<HTMLImageElement>(null);
-
-  const streamUrl = useMemo(() => {
-    const API_BASE = import.meta.env.DEV ? '' : 'http://localhost:8000';
-    return `${API_BASE}/api/stream`;
-  }, []);
+  const prevBlobUrlRef = useRef<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const width = resolution?.width ?? DEFAULT_WIDTH;
   const height = resolution?.height ?? DEFAULT_HEIGHT;
@@ -51,10 +55,47 @@ export function CameraView({
   }, [fetchResolution]);
 
   useEffect(() => {
+    let active = true;
+
+    function connect() {
+      if (!active) return;
+      const wsUrl = getStreamWsUrl();
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        if (!(event.data instanceof ArrayBuffer)) return;
+        const blob = new Blob([event.data], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+
+        if (imgRef.current) {
+          imgRef.current.src = url;
+        }
+
+        if (prevBlobUrlRef.current) {
+          URL.revokeObjectURL(prevBlobUrlRef.current);
+        }
+        prevBlobUrlRef.current = url;
+      };
+
+      ws.onclose = () => {
+        if (!active) return;
+        reconnectTimerRef.current = setTimeout(connect, 1000);
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    connect();
+
     return () => {
-      if (imgRef.current) {
-        imgRef.current.src = '';
-      }
+      active = false;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (wsRef.current) wsRef.current.close();
+      if (prevBlobUrlRef.current) URL.revokeObjectURL(prevBlobUrlRef.current);
     };
   }, []);
 
@@ -68,15 +109,11 @@ export function CameraView({
         className="relative max-w-full max-h-full bg-black"
         style={{ aspectRatio: width / height }}
       >
-        {/* Camera feed: MJPEG stream - fills container, no stretch */}
+        {/* Camera feed: rendered from WebSocket JPEG frames via Blob URL */}
         <img
-          key={retryKey}
-          src={streamUrl}
+          ref={imgRef}
           className="w-full h-full object-contain block"
-          onError={(e) => {
-            console.error('Stream error, retrying...');
-            setTimeout(() => setRetryKey(prev => prev + 1), 2000);
-          }}
+          alt="camera stream"
         />
 
         {/* Crosshair / Target Center */}

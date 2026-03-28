@@ -16,7 +16,7 @@ from app.services.camera import _create_capture, _release_capture
 
 logger = logging.getLogger(__name__)
 
-# --- NEW GLOBAL SHARED STATE ---
+# --- GLOBAL SHARED STATE ---
 _frame_lock = threading.Lock()
 _current_frame: Optional[cv2.Mat] = None
 _pipeline_stop = threading.Event()
@@ -35,7 +35,18 @@ _latest_result: Optional[Dict[str, Any]] = None
 
 
 def _capture_loop() -> None:
-    """Thread 1: Absolute highest speed grab. Drains the RTSP buffer."""
+    """
+    Thread 1: Drain the RTSP buffer at maximum speed.
+
+    Key design decisions:
+    - grab() only fetches the compressed packet from the network; retrieve()
+      does the actual decode. By calling grab() in a tight loop we drain any
+      buffered frames so that when we finally retrieve() we always get the
+      most-recently-transmitted frame from the camera.
+    - We never sleep inside the hot path — the camera's own frame rate acts
+      as the natural throttle.
+    - On reconnect we back off for 1 second to avoid hammering a dead stream.
+    """
     global _current_frame
     cap = _create_capture()
     if cap is None:
@@ -43,39 +54,55 @@ def _capture_loop() -> None:
         return
     try:
         while not _pipeline_stop.is_set():
-            # grab() is low-overhead; check for a new packet on the wire
             if cap.grab():
                 ret, frame = cap.retrieve()
                 if ret and frame is not None:
                     with _frame_lock:
-                        # ALWAYS OVERWRITE: This kills the 1-second backlog
                         _current_frame = frame
             else:
                 logger.warning("Stream lost, attempting reconnect...")
                 _release_capture(cap)
+                cap = None
+                time.sleep(1.0)
                 cap = _create_capture()
                 if cap is None:
-                    time.sleep(1.0)
+                    logger.error("Reconnect failed, will retry in 1s")
     except Exception as e:
         logger.error("Pipeline capture thread error: %s", e, exc_info=True)
     finally:
-        _release_capture(cap)
+        if cap is not None:
+            _release_capture(cap)
 
 
 def _detection_loop() -> None:
-    """Thread 2: Run detection on frames from buffer, update shared target position."""
+    """
+    Thread 2: Run YOLO detection on the latest frame from the shared buffer.
+
+    The deferred import breaks the circular dependency:
+      tracking_pipeline (module load) -> tracking.py (module load) -> tracking_pipeline
+    By importing inside the function body both modules are fully initialised first.
+    """
     from app.api.routes.tracking import _run_detection_on_frame
-    global _latest_result, _current_frame
+
+    global _latest_result
     tracks: Dict = {}
     next_track_id = 0
+    last_frame_id = None
+
     try:
         while not _pipeline_stop.is_set():
             with _frame_lock:
                 frame = _current_frame
-            
+
             if frame is None:
                 time.sleep(0.005)
                 continue
+
+            frame_id = id(frame)
+            if frame_id == last_frame_id:
+                time.sleep(0.002)
+                continue
+            last_frame_id = frame_id
 
             try:
                 tracks, next_track_id, payload = _run_detection_on_frame(
@@ -127,8 +154,10 @@ def _ptu_control_loop() -> None:
                 delta_pan *= scale
                 delta_pitch *= scale
 
-            if auto_tracking_service.INVERT_PAN: delta_pan = -delta_pan
-            if auto_tracking_service.INVERT_PITCH: delta_pitch = -delta_pitch
+            if auto_tracking_service.INVERT_PAN:
+                delta_pan = -delta_pan
+            if auto_tracking_service.INVERT_PITCH:
+                delta_pitch = -delta_pitch
 
             speed = auto_tracking_service._get_speed_from_distance(error_px, width)
             ptu_service.move_relative(delta_pan, delta_pitch, speed)
@@ -137,7 +166,7 @@ def _ptu_control_loop() -> None:
 
 
 def get_current_frame_for_stream() -> Optional[cv2.Mat]:
-    """Helper for MJPEG generator to get the latest frame without a new RTSP connection."""
+    """Return the latest captured frame for the MJPEG/WebSocket stream."""
     with _frame_lock:
         return _current_frame
 
@@ -154,9 +183,9 @@ def start_pipeline() -> None:
         logger.warning("Pipeline already running")
         return
     _pipeline_stop.clear()
-    _capture_thread = threading.Thread(target=_capture_loop, daemon=True)
-    _detection_thread = threading.Thread(target=_detection_loop, daemon=True)
-    _ptu_thread = threading.Thread(target=_ptu_control_loop, daemon=True)
+    _capture_thread = threading.Thread(target=_capture_loop, daemon=True, name="capture")
+    _detection_thread = threading.Thread(target=_detection_loop, daemon=True, name="detection")
+    _ptu_thread = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
     _capture_thread.start()
     _detection_thread.start()
     _ptu_thread.start()
