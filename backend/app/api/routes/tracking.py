@@ -11,9 +11,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from app.services.alert_mail import process_balloon_detection
-from app.services.camera import _create_capture, _release_capture, get_frame
+from app.services.camera import _create_capture, _release_capture
 from app.services.detection import detect_objects
 from app.services import view_subscription
+from app.services import tracking_pipeline
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
@@ -508,9 +509,10 @@ def _run_detection_and_tracking(
     Run frame capture, then detection and tracking. Used when pipeline is disabled.
     Returns (cap, tracks, next_track_id, payload_dict).
     """
-    cap, frame = get_frame(cap)
+    frame = tracking_pipeline.get_current_frame_for_stream()
     if frame is None:
         return cap, tracks, next_track_id, {"timestamp": 0, "balloons": []}
+        
     tracks, next_track_id, payload = _run_detection_on_frame(frame, tracks, next_track_id)
     return cap, tracks, next_track_id, payload
 
