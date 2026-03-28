@@ -9,27 +9,23 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import cv2
-from app.services.camera import _create_capture, _release_capture, get_frame
-from app.api.routes.tracking import (
-    set_last_prediction,
-    _run_detection_on_frame,
-)
+from app.services.camera import _create_capture, _release_capture
+from app.api.routes.tracking import _run_detection_on_frame
 
 logger = logging.getLogger(__name__)
 
 # --- NEW GLOBAL SHARED STATE ---
 _frame_lock = threading.Lock()
 _current_frame: Optional[cv2.Mat] = None
-# -------------------------------
+_pipeline_stop = threading.Event()
 
 # Pipeline configuration
 PTU_LOOP_INTERVAL_SEC = 0.1  # 100ms fixed rate for PTU control
 
 # Thread control
-_pipeline_stop = threading.Event()
 _capture_thread: Optional[threading.Thread] = None
 _detection_thread: Optional[threading.Thread] = None
 _ptu_thread: Optional[threading.Thread] = None
@@ -99,46 +95,49 @@ def _ptu_control_loop() -> None:
     from app.services import ptu as ptu_service
     from app.services import auto_tracking as auto_tracking_service
 
-    while not _pipeline_stop.is_set():
-        time.sleep(PTU_LOOP_INTERVAL_SEC)
+    try:
+        while not _pipeline_stop.is_set():
+            time.sleep(PTU_LOOP_INTERVAL_SEC)
 
-        if not config_service.get_auto_tracking() or not ptu_service.is_connected():
-            continue
+            if not config_service.get_auto_tracking() or not ptu_service.is_connected():
+                continue
 
-        pred = _get_last_prediction_from_pipeline()
-        if pred is None:
-            ptu_service.direction("pause")
-            continue
+            pred = _get_last_prediction_from_pipeline()
+            if pred is None:
+                ptu_service.direction("pause")
+                continue
 
-        pred_x, pred_y = pred["x"], pred["y"]
-        width, height = pred["width"], pred["height"]
-        center_x, center_y = width / 2.0, height / 2.0
-        error_x, error_y = pred_x - center_x, center_y - pred_y
-        error_px = (error_x**2 + error_y**2) ** 0.5
+            pred_x, pred_y = pred["x"], pred["y"]
+            width, height = pred["width"], pred["height"]
+            center_x, center_y = width / 2.0, height / 2.0
+            error_x, error_y = pred_x - center_x, center_y - pred_y
+            error_px = (error_x**2 + error_y**2) ** 0.5
 
-        if error_px < auto_tracking_service.DEADBAND_PX:
-            continue
+            if error_px < auto_tracking_service.DEADBAND_PX:
+                continue
 
-        deg_per_px_x = auto_tracking_service.DEFAULT_HFOV_DEG / width
-        deg_per_px_y = (auto_tracking_service.DEFAULT_HFOV_DEG * (height / width)) / height
-        delta_pan, delta_pitch = error_x * deg_per_px_x, error_y * deg_per_px_y
+            deg_per_px_x = auto_tracking_service.DEFAULT_HFOV_DEG / width
+            deg_per_px_y = (auto_tracking_service.DEFAULT_HFOV_DEG * (height / width)) / height
+            delta_pan, delta_pitch = error_x * deg_per_px_x, error_y * deg_per_px_y
 
-        max_step = auto_tracking_service._get_step_from_distance(error_px, width)
-        mag = (delta_pan**2 + delta_pitch**2) ** 0.5
-        if mag > max_step:
-            scale = max_step / mag
-            delta_pan *= scale
-            delta_pitch *= scale
+            max_step = auto_tracking_service._get_step_from_distance(error_px, width)
+            mag = (delta_pan**2 + delta_pitch**2) ** 0.5
+            if mag > max_step:
+                scale = max_step / mag
+                delta_pan *= scale
+                delta_pitch *= scale
 
-        if auto_tracking_service.INVERT_PAN: delta_pan = -delta_pan
-        if auto_tracking_service.INVERT_PITCH: delta_pitch = -delta_pitch
+            if auto_tracking_service.INVERT_PAN: delta_pan = -delta_pan
+            if auto_tracking_service.INVERT_PITCH: delta_pitch = -delta_pitch
 
-        speed = auto_tracking_service._get_speed_from_distance(error_px, width)
-        ptu_service.move_relative(delta_pan, delta_pitch, speed)
+            speed = auto_tracking_service._get_speed_from_distance(error_px, width)
+            ptu_service.move_relative(delta_pan, delta_pitch, speed)
+    except Exception as e:
+        logger.error("Pipeline PTU control thread error: %s", e, exc_info=True)
 
 
 def get_current_frame_for_stream() -> Optional[cv2.Mat]:
-    """Helper for camera.py MJPEG generator."""
+    """Helper for MJPEG generator to get the latest frame without a new RTSP connection."""
     with _frame_lock:
         return _current_frame
 
@@ -152,6 +151,7 @@ def start_pipeline() -> None:
     """Start the three pipeline threads."""
     global _capture_thread, _detection_thread, _ptu_thread
     if _capture_thread is not None and _capture_thread.is_alive():
+        logger.warning("Pipeline already running")
         return
     _pipeline_stop.clear()
     _capture_thread = threading.Thread(target=_capture_loop, daemon=True)
@@ -160,6 +160,7 @@ def start_pipeline() -> None:
     _capture_thread.start()
     _detection_thread.start()
     _ptu_thread.start()
+    logger.info("Tracking pipeline started (Shared Buffer mode)")
 
 
 def stop_pipeline() -> None:
@@ -167,8 +168,10 @@ def stop_pipeline() -> None:
     global _capture_thread, _detection_thread, _ptu_thread
     _pipeline_stop.set()
     for t in (_capture_thread, _detection_thread, _ptu_thread):
-        if t: t.join(timeout=1.0)
+        if t is not None and t.is_alive():
+            t.join(timeout=2.0)
     _capture_thread = _detection_thread = _ptu_thread = None
+    logger.info("Tracking pipeline stopped")
 
 
 def get_latest_result() -> Optional[Dict[str, Any]]:
