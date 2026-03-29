@@ -13,8 +13,8 @@ interface CameraViewProps {
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 720;
 
-const LASER_OFFSET_X = -50;  
-const LASER_OFFSET_Y =  50;  
+const LASER_OFFSET_X = -10;  
+const LASER_OFFSET_Y =  45;  
 
 function getStreamWsUrl(): string {
   const host = window.location.hostname;
@@ -157,17 +157,6 @@ export function CameraView({
                 top:  `${scaleY(laserY)}%`,
               }}
             />
-
-            {/* Small label showing offset is active */}
-            <div
-              className="absolute font-mono text-[9px] text-yellow-400/70 bg-black/50 px-1 rounded"
-              style={{
-                left: `${scaleX(laserX + 20)}%`,
-                top:  `${scaleY(laserY - 20)}%`,
-              }}
-            >
-              laser
-            </div>
           </div>
         )}
 

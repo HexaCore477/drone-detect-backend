@@ -19,7 +19,8 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 # Tracking configuration
 MAX_TRACK_AGE_SEC = 2.0  # Remove tracks older than this
-PREDICTION_LEAD_SEC = 0  # 10ms ahead
+PREDICTION_LEAD_SEC = 0.10  # 100ms lead — covers YOLO latency + PTU command + mechanical response
+WARMUP_FRAMES = 4         # Minimum updates before velocity is reliable enough to apply lead
 SEND_INTERVAL_SEC = 0.05  # 50ms between sends
 
 # Shared last prediction for backend PTU auto-tracking (primary target only)
@@ -223,6 +224,7 @@ class Track:
         self.kalman = KalmanFilter2D(cx, cy, dt=SEND_INTERVAL_SEC)
         self.kalman.update(cx, cy)
         self._last_measurement = (float(cx), float(cy))
+        self._update_count = 1  # counts how many measurements have been fused
 
         # Store bbox from last detection (Kalman only tracks center)
         self._bbox = {
@@ -240,6 +242,7 @@ class Track:
         self.kalman.update(cx, cy)
         self.last_seen = timestamp
         self._last_measurement = (float(cx), float(cy))
+        self._update_count += 1
         self.color = detection.get("color", self.color)
         self._bbox = {
             "bbox_x": detection["bbox_x"],
@@ -249,7 +252,10 @@ class Track:
         }
 
     def predict(self, lead_seconds: float) -> Tuple[float, float]:
-        """Predict position lead_seconds ahead using Kalman filter."""
+        """Predict position lead_seconds ahead using Kalman filter.
+        """
+        if self._update_count < WARMUP_FRAMES:
+            return self.get_current_position()
         return self.kalman.predict_ahead(lead_seconds)
 
     def get_current_position(self) -> Tuple[float, float]:
@@ -479,6 +485,7 @@ def _run_detection_on_frame(
         vy = v * np.sin(psi)
         pred_cx, pred_cy = primary_item["pred_cx"], primary_item["pred_cy"]
         last_meas = getattr(t, "_last_measurement", (x, y))
+        warmed_up = t._update_count >= WARMUP_FRAMES
         kalman_data = {
             "trackId": t.id,
             "x": x,
@@ -489,6 +496,8 @@ def _run_detection_on_frame(
             "predY": float(pred_cy),
             "measurementX": float(last_meas[0]),
             "measurementY": float(last_meas[1]),
+            "updateCount": t._update_count,
+            "warmedUp": warmed_up,
         }
 
     payload = {
