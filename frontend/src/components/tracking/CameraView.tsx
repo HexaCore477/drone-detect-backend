@@ -13,6 +13,9 @@ interface CameraViewProps {
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 720;
 
+const LASER_OFFSET_X = -50;  
+const LASER_OFFSET_Y =  50;  
+
 function getStreamWsUrl(): string {
   const host = window.location.hostname;
   const port = import.meta.env.DEV ? '8000' : window.location.port || '8000';
@@ -37,8 +40,8 @@ export function CameraView({
   const width = resolution?.width ?? DEFAULT_WIDTH;
   const height = resolution?.height ?? DEFAULT_HEIGHT;
 
-  const centerX = centerXProp ?? width / 2;
-  const centerY = centerYProp ?? height / 2;
+  const laserX = (centerXProp ?? width  / 2) + LASER_OFFSET_X;
+  const laserY = (centerYProp ?? height / 2) - LASER_OFFSET_Y; 
 
   const fetchResolution = useCallback(async () => {
     try {
@@ -121,34 +124,54 @@ export function CameraView({
           <div className="absolute inset-0 z-10 pointer-events-none">
             {/* Horizontal line */}
             <div
-              className="absolute left-0 right-0 h-px bg-primary/50"
-              style={{ top: `${scaleY(centerY)}%` }}
+              className="absolute left-0 right-0 h-px bg-white/20"
+              style={{ top: `${scaleY(height / 2)}%` }}
             />
-            {/* Vertical line */}
             <div
-              className="absolute top-0 bottom-0 w-px bg-primary/50"
-              style={{ left: `${scaleX(centerX)}%` }}
+              className="absolute top-0 bottom-0 w-px bg-white/20"
+              style={{ left: `${scaleX(width / 2)}%` }}
             />
-            {/* Center circle */}
+            <div
+              className="absolute left-0 right-0 h-px bg-primary/60"
+              style={{ top: `${scaleY(laserY)}%` }}
+            />
+            <div
+              className="absolute top-0 bottom-0 w-px bg-primary/60"
+              style={{ left: `${scaleX(laserX)}%` }}
+            />
+
+            {/* Laser aim circle — green, offset position */}
             <div
               className="absolute w-8 h-8 border-2 border-green-500 rounded-full -translate-x-1/2 -translate-y-1/2"
               style={{
-                left: `${scaleX(centerX)}%`,
-                top: `${scaleY(centerY)}%`,
+                left: `${scaleX(laserX)}%`,
+                top:  `${scaleY(laserY)}%`,
               }}
             />
-            {/* Inner dot */}
+
+            {/* Laser dot — red, offset position */}
             <div
               className="absolute w-2 h-2 bg-red-500 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_hsl(var(--primary))]"
               style={{
-                left: `${scaleX(centerX)}%`,
-                top: `${scaleY(centerY)}%`,
+                left: `${scaleX(laserX)}%`,
+                top:  `${scaleY(laserY)}%`,
               }}
             />
+
+            {/* Small label showing offset is active */}
+            <div
+              className="absolute font-mono text-[9px] text-yellow-400/70 bg-black/50 px-1 rounded"
+              style={{
+                left: `${scaleX(laserX + 20)}%`,
+                top:  `${scaleY(laserY - 20)}%`,
+              }}
+            >
+              laser
+            </div>
           </div>
         )}
 
-        {/* Frame Counter / Timestamp Overlay */}
+        {/* Timestamp overlay */}
         <div className="absolute bottom-2 left-2 z-10 font-mono text-[10px] text-primary/70 bg-black/50 px-2 py-0.5 rounded">
           {new Date().toISOString().replace('T', ' ').slice(0, 19)}
         </div>
@@ -158,21 +181,21 @@ export function CameraView({
           {width}×{height}
         </div>
 
-        {/* Balloon bounding boxes (from tracking WebSocket) */}
+        {/* Bounding boxes */}
         {balloons.map((b) => (
           <div
             key={b.id}
             className="absolute border-2 border-red-500 box-border z-10 pointer-events-none"
             style={{
-              left: `${scaleX(b.boundingBox.x)}%`,
-              top: `${scaleY(b.boundingBox.y)}%`,
-              width: `${scaleX(b.boundingBox.width)}%`,
+              left:   `${scaleX(b.boundingBox.x)}%`,
+              top:    `${scaleY(b.boundingBox.y)}%`,
+              width:  `${scaleX(b.boundingBox.width)}%`,
               height: `${scaleY(b.boundingBox.height)}%`,
             }}
           />
         ))}
 
-        {/* Prediction points (500ms-ahead position for each balloon) */}
+        {/* Prediction points */}
         {balloons.map((b) => {
           const predX = b.predictedCenterX ?? b.centerX;
           const predY = b.predictedCenterY ?? b.centerY;
@@ -182,7 +205,7 @@ export function CameraView({
               className="absolute w-5 h-5 border-2 border-cyan-400 bg-cyan-400/50 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
               style={{
                 left: `${scaleX(predX)}%`,
-                top: `${scaleY(predY)}%`,
+                top:  `${scaleY(predY)}%`,
                 boxShadow: '0 0 8px rgba(34, 211, 238, 0.8)',
               }}
               title={t('camera.predicted', '{{id}} predicted (500ms)', { id: b.id })}

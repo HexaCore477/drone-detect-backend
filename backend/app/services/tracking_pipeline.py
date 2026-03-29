@@ -2,7 +2,7 @@
 Asynchronous tracking pipeline with three parallel threads:
   Thread 1: Grab frames continuously -> Shared Buffer
   Thread 2: Run detection on frames from buffer -> shared_target_position
-  Thread 3: PTU control loop at fixed rate (reads shared_target_position)
+  Thread 3: Position-step PTU controller using H52 (move_relative)
 """
 from __future__ import annotations
 
@@ -21,9 +21,6 @@ _frame_lock = threading.Lock()
 _current_frame: Optional[cv2.Mat] = None
 _pipeline_stop = threading.Event()
 
-# Pipeline configuration
-PTU_LOOP_INTERVAL_SEC = 0.1  # 100ms fixed rate for PTU control
-
 # Thread control
 _capture_thread: Optional[threading.Thread] = None
 _detection_thread: Optional[threading.Thread] = None
@@ -33,20 +30,29 @@ _ptu_thread: Optional[threading.Thread] = None
 _result_lock = threading.Lock()
 _latest_result: Optional[Dict[str, Any]] = None
 
+PTU_INVERT_PAN  = True
+PTU_INVERT_TILT = False
+
+LASER_OFFSET_X = -10  
+LASER_OFFSET_Y = 40   
+
+PTU_HFOV_DEG = 60.0
+
+PTU_GAIN = 0.2
+
+PTU_MAX_STEP_DEG = 8.0
+PTU_MIN_STEP_DEG = 0.05
+
+PTU_STEP_SPEED = 18000
+PTU_STEP_ACCEL = 20000
+
+PTU_DEADBAND_PX = 10
+
+PTU_LOOP_SEC = 0.05  
+
 
 def _capture_loop() -> None:
-    """
-    Thread 1: Drain the RTSP buffer at maximum speed.
-
-    Key design decisions:
-    - grab() only fetches the compressed packet from the network; retrieve()
-      does the actual decode. By calling grab() in a tight loop we drain any
-      buffered frames so that when we finally retrieve() we always get the
-      most-recently-transmitted frame from the camera.
-    - We never sleep inside the hot path — the camera's own frame rate acts
-      as the natural throttle.
-    - On reconnect we back off for 1 second to avoid hammering a dead stream.
-    """
+    """Thread 1: Drain the RTSP buffer at maximum speed."""
     global _current_frame
     cap = _create_capture()
     if cap is None:
@@ -75,13 +81,7 @@ def _capture_loop() -> None:
 
 
 def _detection_loop() -> None:
-    """
-    Thread 2: Run YOLO detection on the latest frame from the shared buffer.
-
-    The deferred import breaks the circular dependency:
-      tracking_pipeline (module load) -> tracking.py (module load) -> tracking_pipeline
-    By importing inside the function body both modules are fully initialised first.
-    """
+    """Thread 2: Run YOLO detection on the latest frame."""
     from app.api.routes.tracking import _run_detection_on_frame
 
     global _latest_result
@@ -117,56 +117,79 @@ def _detection_loop() -> None:
 
 
 def _ptu_control_loop() -> None:
-    """Thread 3: PTU control at fixed rate."""
+    """
+    Thread 3: Position-step PTU controller at 20Hz.
+    """
     from app.services import config as config_service
     from app.services import ptu as ptu_service
-    from app.services import auto_tracking as auto_tracking_service
+
+    no_detection_count: int = 0
 
     try:
         while not _pipeline_stop.is_set():
-            time.sleep(PTU_LOOP_INTERVAL_SEC)
+            time.sleep(PTU_LOOP_SEC)
 
             if not config_service.get_auto_tracking() or not ptu_service.is_connected():
+                no_detection_count = 0
                 continue
 
             pred = _get_last_prediction_from_pipeline()
+
             if pred is None:
-                ptu_service.direction("pause")
+                no_detection_count += 1
                 continue
 
-            pred_x, pred_y = pred["x"], pred["y"]
-            width, height = pred["width"], pred["height"]
-            center_x, center_y = width / 2.0, height / 2.0
-            error_x, error_y = pred_x - center_x, center_y - pred_y
-            error_px = (error_x**2 + error_y**2) ** 0.5
+            no_detection_count = 0
 
-            if error_px < auto_tracking_service.DEADBAND_PX:
+            pred_x  = pred["x"]
+            pred_y  = pred["y"]
+            width   = pred["width"]
+            height  = pred["height"]
+
+            aim_x = (width  / 2.0) + LASER_OFFSET_X
+            aim_y = (height / 2.0) - LASER_OFFSET_Y 
+
+            error_x = pred_x - aim_x
+            error_y = aim_y - pred_y
+            error_px = (error_x ** 2 + error_y ** 2) ** 0.5
+
+            if error_px < PTU_DEADBAND_PX:
                 continue
 
-            deg_per_px_x = auto_tracking_service.DEFAULT_HFOV_DEG / width
-            deg_per_px_y = (auto_tracking_service.DEFAULT_HFOV_DEG * (height / width)) / height
-            delta_pan, delta_pitch = error_x * deg_per_px_x, error_y * deg_per_px_y
+            deg_per_px_x = PTU_HFOV_DEG / width
+            deg_per_px_y = PTU_HFOV_DEG * (height / width) / height
 
-            max_step = auto_tracking_service._get_step_from_distance(error_px, width)
-            mag = (delta_pan**2 + delta_pitch**2) ** 0.5
-            if mag > max_step:
-                scale = max_step / mag
-                delta_pan *= scale
-                delta_pitch *= scale
+            error_deg_x = error_x * deg_per_px_x
+            error_deg_y = error_y * deg_per_px_y
 
-            if auto_tracking_service.INVERT_PAN:
-                delta_pan = -delta_pan
-            if auto_tracking_service.INVERT_PITCH:
-                delta_pitch = -delta_pitch
+            step_x = error_deg_x * PTU_GAIN
+            step_y = error_deg_y * PTU_GAIN
 
-            speed = auto_tracking_service._get_speed_from_distance(error_px, width)
-            ptu_service.move_relative(delta_pan, delta_pitch, speed)
+            step_x = max(-PTU_MAX_STEP_DEG, min(PTU_MAX_STEP_DEG, step_x))
+            step_y = max(-PTU_MAX_STEP_DEG, min(PTU_MAX_STEP_DEG, step_y))
+
+            if abs(step_x) < PTU_MIN_STEP_DEG and abs(step_y) < PTU_MIN_STEP_DEG:
+                continue
+
+            if PTU_INVERT_PAN:
+                step_x = -step_x
+            if PTU_INVERT_TILT:
+                step_y = -step_y
+
+            ptu_service.move_relative(step_x, step_y, PTU_STEP_SPEED)
+
+            print(
+                f"[PTU] err=({error_x:+.1f},{error_y:+.1f})px "
+                f"aim=({aim_x:.0f},{aim_y:.0f}) "
+                f"step=({step_x:+.3f},{step_y:+.3f})deg "
+                f"total={error_px:.1f}px"
+            )
+
     except Exception as e:
         logger.error("Pipeline PTU control thread error: %s", e, exc_info=True)
 
 
 def get_current_frame_for_stream() -> Optional[cv2.Mat]:
-    """Return the latest captured frame for the MJPEG/WebSocket stream."""
     with _frame_lock:
         return _current_frame
 
@@ -177,15 +200,14 @@ def _get_last_prediction_from_pipeline() -> Optional[Dict[str, float]]:
 
 
 def start_pipeline() -> None:
-    """Start the three pipeline threads."""
     global _capture_thread, _detection_thread, _ptu_thread
     if _capture_thread is not None and _capture_thread.is_alive():
         logger.warning("Pipeline already running")
         return
     _pipeline_stop.clear()
-    _capture_thread = threading.Thread(target=_capture_loop, daemon=True, name="capture")
-    _detection_thread = threading.Thread(target=_detection_loop, daemon=True, name="detection")
-    _ptu_thread = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
+    _capture_thread   = threading.Thread(target=_capture_loop,     daemon=True, name="capture")
+    _detection_thread = threading.Thread(target=_detection_loop,   daemon=True, name="detection")
+    _ptu_thread       = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
     _capture_thread.start()
     _detection_thread.start()
     _ptu_thread.start()
@@ -193,7 +215,6 @@ def start_pipeline() -> None:
 
 
 def stop_pipeline() -> None:
-    """Stop the pipeline threads."""
     global _capture_thread, _detection_thread, _ptu_thread
     _pipeline_stop.set()
     for t in (_capture_thread, _detection_thread, _ptu_thread):
