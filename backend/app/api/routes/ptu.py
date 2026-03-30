@@ -26,6 +26,11 @@ class ConnectBody(BaseModel):
     baud: int = 9600
 
 
+class ChangeBaudBody(BaseModel):
+    baud: int
+    """New baud rate. Supported values: 9600, 115200."""
+
+
 @router.get("/getports")
 def get_ports():
     """Return available serial port names."""
@@ -38,19 +43,56 @@ def connect_status():
     """Return whether PTU is currently connected."""
     return {"connected": ptu_service.is_connected()}
 
+
 @router.get("/position/cached")
 def get_cached_position():
     """Return cached (pan, tilt) position in degrees."""
     pan, tilt = ptu_service.get_position()
     return {"pan": pan, "tilt": tilt}
 
+
 @router.get("/position/query")
 def query_position():
-    """Query PTU for actual position via H10E/H20E. Returns (pan, tilt) in degrees."""
-    success, pan, tilt = ptu_service.query_position()
+    """
+    Method 1 — On-demand position query.
+    Sends H10E (azimuth / A1) and H20E (pitch / A2) to the PTU.
+    Returns pulse counts and converted angles:
+      angle (°) = pulse_count × resolution  (read from H99E on connect).
+    """
+    success, pan, tilt, az_pulse, pt_pulse = ptu_service.query_position()
     if not success:
         raise HTTPException(status_code=503, detail="PTU position query failed or timed out")
-    return {"pan": pan, "tilt": tilt}
+    return {
+        "pan": pan,
+        "tilt": tilt,
+        "az_pulse": az_pulse,
+        "pt_pulse": pt_pulse,
+        "resolution": ptu_service.get_resolution(),
+    }
+
+
+@router.get("/resolution")
+def get_resolution():
+    """
+    Return the cached pulse-to-degree resolution (°/pulse).
+    Updated automatically on connect via H99E, or manually via POST /resolution/refresh.
+    """
+    return {"resolution": ptu_service.get_resolution()}
+
+
+@router.post("/resolution/refresh")
+def refresh_resolution():
+    """
+    Send H99E to the PTU and refresh the pulse-to-degree resolution.
+    Parses the 'pulse-> degree = <value>' line from the PTU response.
+    """
+    success, resolution = ptu_service.read_resolution()
+    if not success:
+        raise HTTPException(
+            status_code=503,
+            detail="PTU resolution query (H99E) failed or timed out",
+        )
+    return {"ok": True, "resolution": resolution}
 
 
 @router.post("/connect")
@@ -60,6 +102,22 @@ def ptu_connect(body: ConnectBody):
     if not success:
         raise HTTPException(status_code=500, detail=message)
     return {"ok": True, "message": message}
+
+
+@router.post("/baud")
+def change_baud(body: ChangeBaudBody):
+    """
+    Change the PTU baud rate at runtime.
+    """
+    if body.baud not in (9600, 115200):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported baud rate {body.baud}. Must be 9600 or 115200.",
+        )
+    success, message = ptu_service.change_baud_rate(body.baud)
+    if not success:
+        raise HTTPException(status_code=500, detail=message)
+    return {"ok": True, "baud": body.baud, "message": message}
 
 
 @router.post("/move/absolute")

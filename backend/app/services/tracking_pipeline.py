@@ -141,13 +141,15 @@ def _ptu_control_loop() -> None:
 
             no_detection_count = 0
 
+            pre_pan, pre_tilt = ptu_service.get_position()
+
             pred_x  = pred["x"]
             pred_y  = pred["y"]
             width   = pred["width"]
             height  = pred["height"]
 
             aim_x = (width  / 2.0) + LASER_OFFSET_X
-            aim_y = (height / 2.0) - LASER_OFFSET_Y 
+            aim_y = (height / 2.0) - LASER_OFFSET_Y
 
             error_x = pred_x - aim_x
             error_y = aim_y - pred_y
@@ -179,7 +181,8 @@ def _ptu_control_loop() -> None:
             ptu_service.move_relative(step_x, step_y, PTU_STEP_SPEED)
 
             print(
-                f"[PTU] err=({error_x:+.1f},{error_y:+.1f})px "
+                f"[PTU] pre=({pre_pan:+.3f}°,{pre_tilt:+.3f}°) "
+                f"err=({error_x:+.1f},{error_y:+.1f})px "
                 f"aim=({aim_x:.0f},{aim_y:.0f}) "
                 f"step=({step_x:+.3f},{step_y:+.3f})deg "
                 f"total={error_px:.1f}px"
