@@ -12,56 +12,40 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-# Pulse <-> degree conversion: angle = pulse × 0.0009375 (PTU42 default)
 PULSE_TO_DEG = 0.0009375
 DEG_TO_PULSE = 1.0 / PULSE_TO_DEG
 
 _resolution: float = PULSE_TO_DEG
 
+
+def _get_ptu_baud() -> int:
+    try:
+        return int(os.getenv("PTU_BAUD", "9600"))
+    except (TypeError, ValueError):
+        return 9600
+
 def _calc_query_delay(baud: int) -> float:
-    """Return the H10E/H20E read delay in seconds for the given baud rate."""
-    if baud >= 115200:
-        return 0.030
-    if baud >= 38400:
-        return 0.080
-    if baud >= 19200:
-        return 0.120
-    # Default / 9600
-    return 0.200
+    if baud >= 115200: return 0.030
+    if baud >= 38400:  return 0.080
+    if baud >= 19200:  return 0.120
+    return 0.200  # 9600 default
 
 
 def _calc_h99_delay(baud: int) -> float:
-    """Return the H99E read delay in seconds for the given baud rate."""
-    if baud >= 115200:
-        return 0.060
-    if baud >= 38400:
-        return 0.180
-    if baud >= 19200:
-        return 0.280
-    # Default / 9600
-    return 0.500
+    if baud >= 115200: return 0.060
+    if baud >= 38400:  return 0.180
+    if baud >= 19200:  return 0.280
+    return 0.500  # 9600 default
 
-_query_delay: float = _calc_query_delay(9600)
-_h99_delay: float   = _calc_h99_delay(9600)
-
-
-def _update_delays(baud: int) -> None:
-    """Recompute read delays for the current baud rate."""
-    global _query_delay, _h99_delay
-    _query_delay = _calc_query_delay(baud)
-    _h99_delay   = _calc_h99_delay(baud)
-    logger.info(
-        "PTU read delays updated for %d baud: query=%.3fs, h99=%.3fs",
-        baud, _query_delay, _h99_delay,
-    )
+_baud       = _get_ptu_baud()
+_query_delay = _calc_query_delay(_baud)
+_h99_delay   = _calc_h99_delay(_baud)
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Speed helpers
 # ---------------------------------------------------------------------------
-
 def _get_default_speed_ptu() -> int:
-    """PTU speed for move_absolute/move_relative. From DEFAULT_SPEED_PTU in .env."""
     try:
         return int(os.getenv("DEFAULT_SPEED_PTU", "10000"))
     except (TypeError, ValueError):
@@ -69,7 +53,6 @@ def _get_default_speed_ptu() -> int:
 
 
 def _get_direction_speed_default() -> int:
-    """PTU speed for direction commands. From DIRECTION_SPEED_DEFAULT in .env."""
     try:
         return int(os.getenv("DIRECTION_SPEED_DEFAULT", "2000"))
     except (TypeError, ValueError):
@@ -77,80 +60,62 @@ def _get_direction_speed_default() -> int:
 
 
 def get_default_speed_ptu() -> int:
-    """Public accessor for API routes."""
     return _get_default_speed_ptu()
 
 
-# move_absolute: H51,<azimuth_pulse>,<pitch_pulse>,<speed_ptu>E
-# move_relative: H52,<delta_azimuth_pulse>,<delta_pitch_pulse>,<speed_ptu>E
-# H10E → get azimuth (A1) in pulses
-# H20E → get pitch (A2) in pulses
-
-# Direction command templates: H61/H62/H63/H64 use speed; H60 uses az_dir,pitch_dir,speed; H65 is pause
+# ---------------------------------------------------------------------------
+# Direction helpers
+# ---------------------------------------------------------------------------
 DIRECTION_COMMANDS: dict[str, bytes] = {
-    "left": b"H61,2000E",
-    "right": b"H62,2000E",
-    "up": b"H63,2000E",
-    "down": b"H64,2000E",
-    "right-up": b"H60,-1,1,2000E",
-    "left-down": b"H60,1,-1,2000E",
+    "left":       b"H61,2000E",
+    "right":      b"H62,2000E",
+    "up":         b"H63,2000E",
+    "down":       b"H64,2000E",
+    "right-up":   b"H60,-1,1,2000E",
+    "left-down":  b"H60,1,-1,2000E",
     "right-down": b"H60,-1,-1,2000E",
-    "left-up": b"H60,1,1,2000E",
-    "pause": b"H65E",
+    "left-up":    b"H60,1,1,2000E",
+    "pause":      b"H65E",
 }
 
 
 def _build_direction_payload(direction_name: str, speed: int) -> bytes:
-    """Build PTU direction command bytes with given speed. Pause ignores speed."""
     if direction_name == "pause":
         return b"H65E"
     if direction_name in ("left", "right", "up", "down"):
         cmd_map = {"left": "H61", "right": "H62", "up": "H63", "down": "H64"}
         return f"{cmd_map[direction_name]},{speed}E".encode("ascii")
-    # Diagonals: H60,az_dir,pitch_dir,speed
     diag_map = {
-        "right-up": (-1, 1),
-        "left-down": (1, -1),
+        "right-up":   (-1,  1),
+        "left-down":  ( 1, -1),
         "right-down": (-1, -1),
-        "left-up": (1, 1),
+        "left-up":    ( 1,  1),
     }
     az_dir, pitch_dir = diag_map.get(direction_name, (0, 0))
     return f"H60,{az_dir},{pitch_dir},{speed}E".encode("ascii")
 
 
-# Sentinel to stop worker thread
+# ---------------------------------------------------------------------------
+# Module-level state
+# ---------------------------------------------------------------------------
 _STOP = object()
 
-# Queue for broadcasting PTU movement commands (H51, H52, H61, etc.) to WebSocket clients.
-# maxsize=1 so we keep only the newest; old data is dropped when full.
 _command_broadcast_queue: queue.Queue = queue.Queue(maxsize=1)
 
-# Serial connection state
-_current_pan = 0.0
-_current_tilt = 0.0
-_serial: Optional["serial.Serial"] = None
-_connected_port: Optional[str] = None
-_connected_baud: Optional[int] = None
-_worker_thread: Optional[threading.Thread] = None
-_serial_lock = threading.Lock()
+_current_pan:  float = 0.0
+_current_tilt: float = 0.0
+_serial:         Optional["serial.Serial"] = None
+_connected_port: Optional[str]             = None
+_connected_baud: Optional[int]             = None
+_worker_thread:  Optional[threading.Thread] = None
+_serial_lock   = threading.Lock()
 _command_queue: queue.Queue = queue.Queue()
-_worker_stop = threading.Event()
+_worker_stop   = threading.Event()
 
 
-def get_available_ports() -> list[str]:
-    """Return list of available serial port names."""
-    try:
-        import serial.tools.list_ports
-        ports = serial.tools.list_ports.comports()
-        return sorted([p.device for p in ports])
-    except ImportError:
-        logger.warning("pyserial not installed, returning empty port list")
-        return []
-    except Exception as e:
-        logger.error("Error listing serial ports: %s", e)
-        return []
-
-
+# ---------------------------------------------------------------------------
+# Internal serial helpers  (worker thread only)
+# ---------------------------------------------------------------------------
 def _degrees_to_pulse(deg: float) -> int:
     """Convert degrees to pulse count."""
     return int(round(deg * DEG_TO_PULSE))
@@ -173,14 +138,13 @@ def _send_and_flush(payload: bytes) -> None:
 
 
 def _query_pulse(cmd: bytes) -> Optional[int]:
-    """Send query command, read response, parse pulse value. Returns None on failure.
-    """
+    """Send H10E/H20E, wait baud-scaled delay, parse pulse reply."""
     if _serial is None or not _serial.is_open:
         return None
     try:
         _serial.write(cmd)
         _serial.flush()
-        time.sleep(_query_delay)
+        time.sleep(_query_delay)   # scaled to PTU_BAUD
         raw = _serial.read(32)
         if not raw:
             return None
@@ -194,17 +158,14 @@ def _query_pulse(cmd: bytes) -> Optional[int]:
 
 
 def _query_resolution_from_h99() -> Optional[float]:
-    """
-    Send H99E and parse the 'pulse-> degree = <value>' line from the response.
-    Returns the resolution float on success, None on failure.
-    """
+    """Send H99E, wait baud-scaled delay, parse resolution."""
     if _serial is None or not _serial.is_open:
         return None
     try:
         _serial.write(b"H99E")
         _serial.flush()
-        time.sleep(_h99_delay)
-        raw = _serial.read(512)  # ReadFile — safe on Windows
+        time.sleep(_h99_delay)   # scaled to PTU_BAUD
+        raw = _serial.read(512)
         if not raw:
             return None
         text = raw.decode("ascii", errors="ignore")
@@ -216,78 +177,9 @@ def _query_resolution_from_h99() -> Optional[float]:
     return None
 
 
-def _change_baud_on_device(new_baud: int) -> bool:
-    """
-    Send H93 to the PTU to change its serial baud rate, then reopen the host
-    port at the new baud rate.
-    """
-    global _serial, _connected_port, _connected_baud
-
-    if _serial is None or not _serial.is_open:
-        logger.warning("_change_baud_on_device: serial not open")
-        return False
-
-    # Only 9600 and 115200 are supported by the device.
-    baud_param_map = {9600: 1, 115200: 2}
-    baud_param = baud_param_map.get(new_baud)
-    if baud_param is None:
-        logger.error(
-            "_change_baud_on_device: unsupported baud rate %d (must be 9600 or 115200)",
-            new_baud,
-        )
-        return False
-
-    # Use a conservative max_speed default; H93 third parameter is the speed
-    # percent/pulse mapping — preserve the device default (20000).
-    max_speed = 20000
-    cmd = f"H93,{baud_param},1,{max_speed}E".encode("ascii")
-
-    logger.info(
-        "Sending baud-rate change command to PTU: %s  (new baud: %d)",
-        cmd.decode("ascii"), new_baud,
-    )
-
-    try:
-        _serial.write(cmd)
-        _serial.flush()
-    except Exception as e:
-        logger.error("Failed to send H93 baud change: %s", e)
-        return False
-
-    # H93 saves the setting and restarts the device immediately.
-    # Give it 1.5 s to restart before reopening.
-    time.sleep(1.5)
-
-    # Reopen the serial port at the new baud rate.
-    port = _connected_port
-    try:
-        _serial.close()
-    except Exception:
-        pass
-
-    try:
-        import serial as _serial_mod
-        _serial = _serial_mod.Serial(
-            port=port,
-            baudrate=new_baud,
-            bytesize=_serial_mod.EIGHTBITS,
-            parity=_serial_mod.PARITY_NONE,
-            stopbits=_serial_mod.STOPBITS_ONE,
-            timeout=0.5,
-            write_timeout=0.5,
-        )
-        _connected_baud = new_baud
-        _update_delays(new_baud)
-        logger.info("PTU port %s reopened at %d baud", port, new_baud)
-        return True
-    except Exception as e:
-        logger.error("Failed to reopen serial port at %d baud: %s", new_baud, e)
-        _serial = None
-        _connected_port = None
-        _connected_baud = None
-        return False
-
-
+# ---------------------------------------------------------------------------
+# Worker thread
+# ---------------------------------------------------------------------------
 def _serial_worker() -> None:
     """Worker thread: processes commands from queue and performs serial I/O."""
     global _current_pan, _current_tilt, _resolution
@@ -328,7 +220,7 @@ def _serial_worker() -> None:
                         az_pulse = _query_pulse(b"H10E")
                         pt_pulse = _query_pulse(b"H20E")
                         if az_pulse is not None and pt_pulse is not None:
-                            _current_pan = _pulse_to_degrees(az_pulse)
+                            _current_pan  = _pulse_to_degrees(az_pulse)
                             _current_tilt = _pulse_to_degrees(pt_pulse)
                             logger.debug(
                                 "PTU position: az=%d pulses → %.4f°, pt=%d pulses → %.4f° (res=%.9f °/pulse)",
@@ -336,7 +228,8 @@ def _serial_worker() -> None:
                             )
                         try:
                             result_queue.put(
-                                (_current_pan, _current_tilt, az_pulse, pt_pulse), block=False
+                                (_current_pan, _current_tilt, az_pulse, pt_pulse),
+                                block=False,
                             )
                         except queue.Full:
                             pass
@@ -379,18 +272,6 @@ def _serial_worker() -> None:
                         _, data = cmd
                         _serial.write(data)
 
-                    elif cmd[0] == "change_baud":
-                        # change_baud must acquire _serial_lock; do it here in the worker
-                        # to avoid deadlock (worker is the only thread that does serial I/O).
-                        new_baud = cmd[1]
-                        result_queue = cmd[2]
-                        with _serial_lock:
-                            ok = _change_baud_on_device(new_baud)
-                        try:
-                            result_queue.put(ok, block=False)
-                        except queue.Full:
-                            pass
-
             except Exception as e:
                 logger.error("PTU worker command failed: %s", e)
                 err_str = str(e)
@@ -419,6 +300,9 @@ def _serial_worker() -> None:
             logger.error("PTU worker error: %s", e)
 
 
+# ---------------------------------------------------------------------------
+# Queue helpers
+# ---------------------------------------------------------------------------
 def _enqueue(cmd: tuple) -> bool:
     """Enqueue command for worker. Returns True if queued, False if not connected."""
     if _serial is None:
@@ -436,12 +320,8 @@ def _drop_old_move_commands() -> None:
     try:
         while True:
             item = _command_queue.get_nowait()
-            if item is _STOP:
+            if item is _STOP or (isinstance(item, tuple) and item[0] == "query_position"):
                 kept.append(item)
-            elif isinstance(item, tuple) and item[0] == "query_position":
-                kept.append(item)
-            else:
-                pass  # move_absolute, move_relative, direction — drop
     except queue.Empty:
         pass
     for item in kept:
@@ -465,6 +345,18 @@ def _drop_old_position_queries() -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+def get_available_ports() -> list[str]:
+    try:
+        import serial.tools.list_ports
+        ports = serial.tools.list_ports.comports()
+        return sorted([p.device for p in ports])
+    except ImportError:
+        logger.warning("pyserial not installed, returning empty port list")
+        return []
+    except Exception as e:
+        logger.error("Error listing serial ports: %s", e)
+        return []
+
 
 def move_absolute(pan: float, tilt: float, speed: int | None = None) -> tuple[bool, str]:
     """
@@ -579,36 +471,18 @@ def direction(direction_name: str, speed: int | None = None) -> tuple[bool, str]
         return False, str(e)
 
 
-def change_baud_rate(new_baud: int) -> tuple[bool, str]:
+def connect(port: str, baud: int | None = None) -> tuple[bool, str]:
     """
-    Change the PTU serial baud rate at runtime.
+    Connect to PTU on the given serial port.
+    Baud rate is taken from PTU_BAUD env var (default 9600) unless explicitly passed.
+    To change baud rate: run scripts/change_ptu_baud.py, then update PTU_BAUD in .env.
     """
-    if new_baud not in (9600, 115200):
-        return False, f"Unsupported baud rate {new_baud}. Must be 9600 or 115200."
-
-    if not _connected_port or _serial is None or not _serial.is_open:
-        return False, "PTU not connected"
-
-    if _connected_baud == new_baud:
-        return True, f"Already at {new_baud} baud — no change needed"
-
-    result_queue: queue.Queue = queue.Queue(maxsize=1)
-    _command_queue.put(("change_baud", new_baud, result_queue))
-    try:
-        # Allow up to 5 s: 1.5 s restart sleep + reopen overhead
-        ok = result_queue.get(timeout=5.0)
-        if ok:
-            logger.info("PTU baud rate changed to %d", new_baud)
-            return True, "OK"
-        return False, f"Failed to change baud rate to {new_baud}"
-    except queue.Empty:
-        logger.warning("PTU change_baud_rate timeout")
-        return False, "Baud rate change timed out"
-
-
-def connect(port: str, baud: int = 9600) -> tuple[bool, str]:
-    """Connect to PTU on the given serial port. Starts worker thread."""
     global _serial, _connected_port, _connected_baud, _worker_thread
+
+    # Use env baud if caller did not supply one explicitly
+    if baud is None:
+        baud = _get_ptu_baud()
+
     with _serial_lock:
         try:
             if _serial is not None:
