@@ -42,6 +42,15 @@ _query_delay = _calc_query_delay(_baud)
 _h99_delay   = _calc_h99_delay(_baud)
 
 
+def _update_delays(baud: int) -> None:
+    """Recompute read delays whenever the active baud rate changes."""
+    global _query_delay, _h99_delay
+    _query_delay = _calc_query_delay(baud)
+    _h99_delay   = _calc_h99_delay(baud)
+    logger.info("PTU read delays: query=%.3fs  h99=%.3fs  @%d baud",
+                _query_delay, _h99_delay, baud)
+
+
 # ---------------------------------------------------------------------------
 # Speed helpers
 # ---------------------------------------------------------------------------
