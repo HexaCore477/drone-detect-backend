@@ -1,5 +1,6 @@
 """PTU API routes."""
 import asyncio
+import os
 import queue
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
@@ -15,33 +16,39 @@ VALID_DIRECTIONS = frozenset(
 )
 
 
+def _default_baud() -> int:
+    """Read PTU_BAUD from env (set after running scripts/change_ptu_baud.py)."""
+    try:
+        return int(os.getenv("PTU_BAUD", "9600"))
+    except (TypeError, ValueError):
+        return 9600
+
+
 class MoveBody(BaseModel):
     pan: float = 0
     tilt: float = 0
-    speed: int | None = None  # PTU speed (default 4000)
+    speed: int | None = None
 
 
 class ConnectBody(BaseModel):
     port: str
-    baud: int = 9600
-
-
-class ChangeBaudBody(BaseModel):
-    baud: int
-    """New baud rate. Supported values: 9600, 115200."""
+    baud: int | None = None
 
 
 @router.get("/getports")
 def get_ports():
     """Return available serial port names."""
-    ports = ptu_service.get_available_ports()
-    return {"ports": ports}
+    return {"ports": ptu_service.get_available_ports()}
 
 
 @router.get("/connect-status")
 def connect_status():
-    """Return whether PTU is currently connected."""
-    return {"connected": ptu_service.is_connected()}
+    """Return whether PTU is currently connected and the active baud rate."""
+    return {
+        "connected": ptu_service.is_connected(),
+        "baud": ptu_service._connected_baud,   # None when disconnected
+        "env_baud": _default_baud(),
+    }
 
 
 @router.get("/position/cached")
@@ -97,27 +104,19 @@ def refresh_resolution():
 
 @router.post("/connect")
 def ptu_connect(body: ConnectBody):
-    """Connect to PTU on the given serial port."""
-    success, message = ptu_service.connect(body.port, body.baud)
+    """
+    Connect to PTU on the given serial port.
+
+    - `baud` is optional. When omitted the service uses PTU_BAUD from .env
+      (default 9600).
+    - To change the device baud rate, run scripts/change_ptu_baud.py while
+      the app is stopped, then update PTU_BAUD in .env and restart.
+    """
+    baud = body.baud if body.baud is not None else _default_baud()
+    success, message = ptu_service.connect(body.port, baud)
     if not success:
         raise HTTPException(status_code=500, detail=message)
-    return {"ok": True, "message": message}
-
-
-@router.post("/baud")
-def change_baud(body: ChangeBaudBody):
-    """
-    Change the PTU baud rate at runtime.
-    """
-    if body.baud not in (9600, 115200):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported baud rate {body.baud}. Must be 9600 or 115200.",
-        )
-    success, message = ptu_service.change_baud_rate(body.baud)
-    if not success:
-        raise HTTPException(status_code=500, detail=message)
-    return {"ok": True, "baud": body.baud, "message": message}
+    return {"ok": True, "message": message, "baud": baud}
 
 
 @router.post("/move/absolute")
