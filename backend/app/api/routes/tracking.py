@@ -19,7 +19,7 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 # Tracking configuration
 MAX_TRACK_AGE_SEC = 2.0  # Remove tracks older than this
-PREDICTION_LEAD_SEC = 0.15  # 150ms lead — covers YOLO latency + PTU command + mechanical response
+PREDICTION_LEAD_SEC = 0.10  # 100ms lead — covers YOLO latency + PTU command + mechanical response
 WARMUP_FRAMES = 4         # Minimum updates before velocity is reliable enough to apply lead
 SEND_INTERVAL_SEC = 0.05  # 50ms between sends
 
