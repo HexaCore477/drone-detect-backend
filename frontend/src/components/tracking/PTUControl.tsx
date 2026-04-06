@@ -63,6 +63,9 @@ export function PTUControl({ ptuState, className, onRefreshPosition }: PTUContro
         if (!cancelled) {
           setIsConnected(status.connected);
           setIsAutoTracking(config.is_auto_tracking);
+          // Seed baud rate from the active connection baud or the env default
+          const effectiveBaud = status.connected && status.baud ? status.baud : status.env_baud;
+          setBaudRate(String(effectiveBaud));
         }
       } catch (err) {
         console.warn('Failed to fetch initial state:', err);
