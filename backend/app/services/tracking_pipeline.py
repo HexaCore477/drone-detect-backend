@@ -2,7 +2,15 @@
 Asynchronous tracking pipeline with three parallel threads:
   Thread 1: Grab frames continuously -> Shared Buffer
   Thread 2: Run detection on frames from buffer -> shared_target_position
-  Thread 3: H60 velocity-mode PTU controller
+  Thread 3: PID + feedforward velocity-mode PTU controller (H60)
+
+Controller design:
+  - Full PID (P + I + D) on pixel error
+  - Velocity feedforward from Kalman state (vx, vy)
+  - Integral anti-windup (clamp + conditional integration)
+  - Derivative on measurement (not on error) to avoid derivative kick
+  - Reduced EMA alpha for faster response
+  - Staleness guard: skips predictions older than 150 ms
 """
 from __future__ import annotations
 
@@ -41,22 +49,58 @@ LASER_OFFSET_Y =  40
 
 PTU_HFOV_DEG = 60.0
 
-PTU_GAIN_H = 0.60
-PTU_GAIN_V = 0.35
+# ── PID gains (pan axis) ────────────────────────────────────────────────────
+# Kp: proportional — main driving force toward center
+# Ki: integral     — eliminates steady-state offset (target never reaches center)
+# Kd: derivative   — damps oscillation / overshoot
+PAN_KP  = 1.20
+PAN_KI  = 0.08   # small: we don't want slow windup to fight fast motion
+PAN_KD  = 0.30
+
+# ── PID gains (tilt axis) ───────────────────────────────────────────────────
+TILT_KP = 0.80
+TILT_KI = 0.05
+TILT_KD = 0.20
+
+# ── Velocity feedforward gains ──────────────────────────────────────────────
+# Applied to Kalman vx/vy (px/s) to anticipate target motion before error builds
+PTU_GAIN_VX = 0.40   # pan  feedforward
+PTU_GAIN_VY = 0.25   # tilt feedforward
+
+# ── Integral anti-windup clamp (in degree-equivalent units) ─────────────────
+# Prevents integral from accumulating when target is far out of frame
+PAN_INTEGRAL_CLAMP  = 15.0
+TILT_INTEGRAL_CLAMP = 10.0
+
+# ── Integral conditional: only integrate when error is small enough ──────────
+# Avoids integral windup during large slews
+INTEGRAL_ENABLE_THRESHOLD_PX = 80
 
 # H60 speed range (pulse/s)
-# PTU_MAX_SPEED ~7.5 deg/s at 64-subdivision — fast enough, smooth enough
 PTU_MAX_SPEED = 8000
 PTU_MIN_SPEED = 300
 
-PTU_LOOP_SEC    = 0.05   # 20 Hz
-PTU_DEADBAND_PX = 6      # smoothed error below this → send H65E stop
+PTU_LOOP_SEC = 0.05   # 20 Hz — must match dt used in integral/derivative
 
-# Error-space EMA alpha (0 = no smoothing, 1 = frozen)
-# 0.35: fast acquisition, residual sign-flip jitter averaged to zero
-PTU_ERROR_EMA_ALPHA = 0.35
+# Deadband: inside this radius (px) PTU stops and holds
+# Reduced from 6 → 2 for better centering
+PTU_DEADBAND_PX = 2
 
-PTU_MAX_VECTOR = 100   # normalised vector magnitude cap fed into H60
+# EMA alpha on raw error before PID (anti-jitter, not anti-response)
+# Reduced from 0.35 → 0.15 — much less control delay
+PTU_ERROR_EMA_ALPHA = 0.15
+
+# Normalised H60 vector magnitude cap
+PTU_MAX_VECTOR = 100
+
+# Prediction lead: how far ahead (seconds) to place the aim point
+# Increased from 0.2 → 0.35 to cover realistic total pipeline latency:
+#   camera buffer ~50ms + YOLO ~80ms + thread sync ~20ms
+#   + PTU loop ~50ms + mechanical ~100ms  ≈ 300-400ms total
+PREDICTION_LEAD_SEC = 0.35
+
+# Staleness guard: ignore predictions older than this
+PREDICTION_MAX_AGE_SEC = 0.15
 
 
 # ---------------------------------------------------------------------------
@@ -129,50 +173,139 @@ def _detection_loop() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Thread 3 — H60 velocity-mode PTU controller
+# PID state container
+# ---------------------------------------------------------------------------
+class _PIDAxis:
+    """Single-axis PID with anti-windup and derivative-on-measurement."""
+
+    def __init__(self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.integral_clamp = integral_clamp
+        self.dt = dt
+        # state
+        self.integral: float = 0.0
+        self.prev_measurement: float = 0.0   # derivative on measurement
+        self._initialised: bool = False
+
+    def reset(self) -> None:
+        self.integral = 0.0
+        self.prev_measurement = 0.0
+        self._initialised = False
+
+    def compute(
+        self,
+        error: float,
+        measurement: float,
+        enable_integral: bool = True,
+    ) -> float:
+        """
+        Compute PID output for one time step.
+
+        Args:
+            error:            current smoothed error (setpoint − measurement)
+            measurement:      raw measurement (used for derivative to avoid kick)
+            enable_integral:  False during large slews to prevent windup
+        Returns:
+            PID output in the same units as error (pixels × gain = deg-equivalent)
+        """
+        # ── Proportional ────────────────────────────────────────────────────
+        p_term = self.kp * error
+
+        # ── Integral with conditional anti-windup ───────────────────────────
+        if enable_integral:
+            self.integral += error * self.dt
+            # Hard clamp
+            self.integral = max(-self.integral_clamp,
+                                min(self.integral_clamp, self.integral))
+        i_term = self.ki * self.integral
+
+        # ── Derivative on measurement (avoids derivative kick on setpoint jump) ─
+        if not self._initialised:
+            self.prev_measurement = measurement
+            self._initialised = True
+        d_meas = (measurement - self.prev_measurement) / self.dt
+        self.prev_measurement = measurement
+        # Negate: if measurement is increasing in direction of error, d_term brakes
+        d_term = -self.kd * d_meas
+
+        return p_term + i_term + d_term
+
+
+# ---------------------------------------------------------------------------
+# Thread 3 — PID + feedforward PTU controller (H60)
 # ---------------------------------------------------------------------------
 def _ptu_control_loop() -> None:
     """
-    20 Hz proportional velocity controller using H60 (continuous joystick mode).
+    20 Hz PID + velocity-feedforward controller using H60 continuous joystick mode.
 
-    Why H60 instead of H52/H54:
-    - H52 uses trapezoidal accel/decel. At 50 ms loop rate the entire small
-      step is consumed by accel/decel — the motor barely moves.
-    - H60 starts continuous motion instantly, speed proportional to error.
-      Send H65E when inside deadband to stop cleanly.
-
-    Error is smoothed in error-space (not output-space) so sign-flipping
-    residuals near zero average to zero → PTU holds still when locked.
+    Output pipeline:
+      raw_error → EMA smooth → PID(P+I+D) → + feedforward(vx,vy) → H60 vector + speed
     """
     from app.services import config as config_service
     from app.services import ptu as ptu_service
 
+    dt = PTU_LOOP_SEC
+
+    # Independent PID instances per axis
+    pid_pan  = _PIDAxis(PAN_KP,  PAN_KI,  PAN_KD,  PAN_INTEGRAL_CLAMP,  dt)
+    pid_tilt = _PIDAxis(TILT_KP, TILT_KI, TILT_KD, TILT_INTEGRAL_CLAMP, dt)
+
+    # EMA state
     smooth_err_x: float = 0.0
     smooth_err_y: float = 0.0
     alpha = PTU_ERROR_EMA_ALPHA
-    was_stopped = True  # avoid spamming H65E when already stopped
+
+    was_stopped = True
+
+    def _stop_ptu() -> None:
+        nonlocal was_stopped
+        if not was_stopped:
+            ptu_service.direction("pause")
+            was_stopped = True
+
+    def _reset_all() -> None:
+        nonlocal smooth_err_x, smooth_err_y
+        pid_pan.reset()
+        pid_tilt.reset()
+        smooth_err_x = 0.0
+        smooth_err_y = 0.0
 
     try:
         while not _pipeline_stop.is_set():
-            time.sleep(PTU_LOOP_SEC)
+            time.sleep(dt)
 
+            # ── Guard: auto-tracking must be on and PTU connected ────────────
             if not config_service.get_auto_tracking() or not ptu_service.is_connected():
-                if not was_stopped:
-                    ptu_service.direction("pause")
-                    was_stopped = True
-                smooth_err_x = smooth_err_y = 0.0
+                _stop_ptu()
+                _reset_all()
                 continue
 
             pred = _get_last_prediction_from_pipeline()
 
+            # ── Guard: no active prediction ──────────────────────────────────
             if pred is None:
-                if not was_stopped:
-                    ptu_service.direction("pause")
-                    was_stopped = True
+                _stop_ptu()
+                # Decay smoothed error toward zero instead of hard reset
                 smooth_err_x *= (1.0 - alpha)
                 smooth_err_y *= (1.0 - alpha)
+                # Decay integral too (target lost → unwind slowly)
+                pid_pan.integral  *= 0.90
+                pid_tilt.integral *= 0.90
                 continue
 
+            # ── Guard: stale prediction ──────────────────────────────────────
+            pred_age = time.time() - pred.get("timestamp", time.time())
+            if pred_age > PREDICTION_MAX_AGE_SEC:
+                _stop_ptu()
+                smooth_err_x *= (1.0 - alpha)
+                smooth_err_y *= (1.0 - alpha)
+                pid_pan.integral  *= 0.90
+                pid_tilt.integral *= 0.90
+                continue
+
+            # ── Compute pixel errors ─────────────────────────────────────────
             pred_x = pred["x"]
             pred_y = pred["y"]
             width  = pred["width"]
@@ -184,26 +317,48 @@ def _ptu_control_loop() -> None:
             raw_err_x = pred_x - aim_x
             raw_err_y = aim_y  - pred_y   # positive = target above aim → tilt up
 
-            # Smooth in error space — kills sign-flipping jitter at deadband
+            # ── EMA smoothing (anti-jitter, low alpha = fast response) ───────
             smooth_err_x = alpha * raw_err_x + (1.0 - alpha) * smooth_err_x
             smooth_err_y = alpha * raw_err_y + (1.0 - alpha) * smooth_err_y
 
             error_px = (smooth_err_x ** 2 + smooth_err_y ** 2) ** 0.5
 
-            # ── Inside deadband: stop and hold ──────────────────────────
+            # ── Deadband: inside this radius hold still ──────────────────────
             if error_px < PTU_DEADBAND_PX:
-                if not was_stopped:
-                    ptu_service.direction("pause")
-                    was_stopped = True
+                _stop_ptu()
+                # Don't reset integral — let it hold the steady-state correction
                 continue
 
-            # ── Outside deadband: issue H60 velocity command ─────────────
-            deg_per_px = PTU_HFOV_DEG / width
+            # ── Angle scaling (auto-corrects for zoom via frame width) ───────
+            # PTU_HFOV_DEG is nominal at native resolution.
+            # At higher zoom the physical FOV shrinks proportionally → same formula
+            # still works because detection reports pixel coords in the actual
+            # captured frame, and width reflects the resolution being processed.
+            deg_per_px = PTU_HFOV_DEG / max(width, 1.0)
 
-            vx = smooth_err_x * deg_per_px * PTU_GAIN_H
-            vy = smooth_err_y * deg_per_px * PTU_GAIN_V
+            # ── Conditional integral: only accumulate when close ─────────────
+            enable_int = error_px < INTEGRAL_ENABLE_THRESHOLD_PX
 
-            # Normalise so dominant axis saturates at PTU_MAX_VECTOR
+            # ── PID output (in degree-equivalent units) ──────────────────────
+            out_x = pid_pan.compute(
+                smooth_err_x * deg_per_px,
+                raw_err_x    * deg_per_px,
+                enable_integral=enable_int,
+            )
+            out_y = pid_tilt.compute(
+                smooth_err_y * deg_per_px,
+                raw_err_y    * deg_per_px,
+                enable_integral=enable_int,
+            )
+
+            # ── Velocity feedforward from Kalman state ───────────────────────
+            ff_vx = pred.get("vx", 0.0) * deg_per_px * PTU_GAIN_VX
+            ff_vy = pred.get("vy", 0.0) * deg_per_px * PTU_GAIN_VY
+
+            vx = out_x + ff_vx
+            vy = out_y - ff_vy   # vy: downward motion → push down
+
+            # ── Normalise to H60 vector space ────────────────────────────────
             max_v = max(abs(vx), abs(vy), 1e-6)
             scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
             a1 = int(round(vx * scale))   # pan  (A1)
@@ -214,11 +369,11 @@ def _ptu_control_loop() -> None:
             if PTU_INVERT_TILT:
                 a2 = -a2
 
-            # Proportional speed: larger error → faster slew
+            # ── Speed: proportional to normalised error magnitude ────────────
             norm_err = min(error_px / (width / 4.0), 1.0)
             speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
 
-            # Send H60 directly through the serial write queue
+            # ── Send H60 directly through the serial write queue ─────────────
             cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
             try:
                 from app.services.ptu import _command_queue, _drop_old_move_commands
@@ -230,11 +385,15 @@ def _ptu_control_loop() -> None:
             was_stopped = False
 
             logger.debug(
-                "[PTU-H60] raw_err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "
-                "vec=(%d,%d) speed=%d",
+                "[PID-H60] err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "
+                "pid=(%.2f,%.2f) ff=(%.2f,%.2f) int=(%.3f,%.3f) "
+                "vec=(%d,%d) speed=%d age=%.3fs",
                 raw_err_x, raw_err_y,
                 smooth_err_x, smooth_err_y,
-                a1, a2, speed,
+                out_x, out_y,
+                ff_vx, ff_vy,
+                pid_pan.integral, pid_tilt.integral,
+                a1, a2, speed, pred_age,
             )
 
     except Exception as e:
@@ -266,7 +425,7 @@ def start_pipeline() -> None:
     _capture_thread.start()
     _detection_thread.start()
     _ptu_thread.start()
-    logger.info("Tracking pipeline started")
+    logger.info("Tracking pipeline started (PID + feedforward controller)")
 
 
 def stop_pipeline() -> None:

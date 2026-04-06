@@ -16,12 +16,12 @@ from app.services import view_subscription
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 # ---------------------------------------------------------------------------
-# Tracking constants (single source of truth — pipeline reads these too)
+# Tracking constants
 # ---------------------------------------------------------------------------
-MAX_TRACK_AGE_SEC   = 2.0   # drop tracks not seen for this long
-PREDICTION_LEAD_SEC = 0.2  # 100 ms lead covers YOLO + PTU command + mechanical lag
-WARMUP_FRAMES       = 4     # min updates before velocity is reliable
-SEND_INTERVAL_SEC   = 0.05  # WebSocket send cadence (50 ms)
+MAX_TRACK_AGE_SEC   = 2.0
+PREDICTION_LEAD_SEC = 0.35   # updated: matches pipeline constant
+WARMUP_FRAMES       = 4
+SEND_INTERVAL_SEC   = 0.05
 
 # ---------------------------------------------------------------------------
 # Shared last-prediction (written by detection thread, read by PTU thread)
@@ -30,13 +30,29 @@ _last_prediction_lock = threading.Lock()
 _last_prediction: Optional[Dict[str, float]] = None
 
 
-def set_last_prediction(x: float, y: float, width: int, height: int, timestamp: float) -> None:
+def set_last_prediction(
+    x: float,
+    y: float,
+    width: int,
+    height: int,
+    timestamp: float,
+    vx: float = 0.0,
+    vy: float = 0.0,
+) -> None:
+    """
+    Store the latest Kalman-predicted target position for the PTU controller.
+    vx/vy are Kalman velocity components (px/s) used for feedforward.
+    """
     global _last_prediction
     with _last_prediction_lock:
         _last_prediction = {
-            "x": float(x), "y": float(y),
-            "width": float(width), "height": float(height),
+            "x":         float(x),
+            "y":         float(y),
+            "width":     float(width),
+            "height":    float(height),
             "timestamp": float(timestamp),
+            "vx":        float(vx),
+            "vy":        float(vy),
         }
 
 
@@ -189,6 +205,12 @@ class Track:
     def get_current_bbox(self) -> Dict:
         return dict(self._bbox)
 
+    def get_velocity(self) -> Tuple[float, float]:
+        """Return (vx, vy) in px/s derived from Kalman CTRV state."""
+        psi = float(self.kalman.state[2, 0])
+        v   = float(self.kalman.state[3, 0])
+        return v * float(np.cos(psi)), v * float(np.sin(psi))
+
 
 # ---------------------------------------------------------------------------
 # IoU association
@@ -256,7 +278,7 @@ def _run_detection_on_frame(
         for tid in [t for t,tr in tracks.items() if timestamp-tr.last_seen > MAX_TRACK_AGE_SEC]:
             del tracks[tid]
 
-    # Build track items only when we have fresh detections (no stale positions)
+    # Build track items only when we have fresh detections
     items: List[Dict[str, Any]] = []
     if raw:
         for track in tracks.values():
@@ -296,11 +318,15 @@ def _run_detection_on_frame(
             confidence=0.85,
         ))
 
-    if primary_pred:
+    if primary_pred and primary_item:
+        # Extract Kalman velocity (px/s) for PTU feedforward
+        kf_vx, kf_vy = primary_item["track"].get_velocity()
         set_last_prediction(
             primary_pred["x"], primary_pred["y"],
             int(primary_pred["width"]), int(primary_pred["height"]),
             timestamp,
+            vx=kf_vx,
+            vy=kf_vy,
         )
     else:
         clear_last_prediction()
@@ -314,10 +340,11 @@ def _run_detection_on_frame(
         k = t.kalman
         px, py = float(k.state[0,0]), float(k.state[1,0])
         psi, v = float(k.state[2,0]), float(k.state[3,0])
+        kf_vx, kf_vy = t.get_velocity()
         kalman_data = {
             "trackId": t.id,
             "x": px, "y": py,
-            "vx": v*np.cos(psi), "vy": v*np.sin(psi),
+            "vx": kf_vx, "vy": kf_vy,
             "predX": primary_item["pred_cx"], "predY": primary_item["pred_cy"],
             "measurementX": float(t._last_measurement[0]),
             "measurementY": float(t._last_measurement[1]),
@@ -339,8 +366,7 @@ def _run_detection_on_frame(
 async def tracking_ws(websocket: WebSocket) -> None:
     """
     Stream detection + tracking results at 50 ms cadence.
-    Always uses the shared pipeline result — no inline capture/detection fallback
-    (pipeline is started unconditionally in app lifespan).
+    Always uses the shared pipeline result.
     """
     from app.services import tracking_pipeline
 
