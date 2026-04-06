@@ -19,7 +19,7 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 # Tracking constants (single source of truth — pipeline reads these too)
 # ---------------------------------------------------------------------------
 MAX_TRACK_AGE_SEC   = 2.0   # drop tracks not seen for this long
-PREDICTION_LEAD_SEC = 0.2   # EKF look-ahead (blue dot on frontend)
+PREDICTION_LEAD_SEC = 0.2  # 100 ms lead covers YOLO + PTU command + mechanical lag
 WARMUP_FRAMES       = 4     # min updates before velocity is reliable
 SEND_INTERVAL_SEC   = 0.05  # WebSocket send cadence (50 ms)
 
@@ -30,21 +30,12 @@ _last_prediction_lock = threading.Lock()
 _last_prediction: Optional[Dict[str, float]] = None
 
 
-def set_last_prediction(
-    raw_x: float, raw_y: float,       # Kalman filtered pos (where target IS now)
-    pred_x: float, pred_y: float,     # Kalman look-ahead pos (blue dot on frontend)
-    width: int, height: int,
-    timestamp: float,
-) -> None:
+def set_last_prediction(x: float, y: float, width: int, height: int, timestamp: float) -> None:
     global _last_prediction
     with _last_prediction_lock:
         _last_prediction = {
-            "raw_x":     float(raw_x),    # current filtered position
-            "raw_y":     float(raw_y),
-            "x":         float(pred_x),   # look-ahead prediction (blue dot)
-            "y":         float(pred_y),
-            "width":     float(width),
-            "height":    float(height),
+            "x": float(x), "y": float(y),
+            "width": float(width), "height": float(height),
             "timestamp": float(timestamp),
         }
 
@@ -269,18 +260,17 @@ def _run_detection_on_frame(
     items: List[Dict[str, Any]] = []
     if raw:
         for track in tracks.values():
-            cx, cy = track.get_current_position()       # Kalman filtered position
-            pcx, pcy = track.predict(PREDICTION_LEAD_SEC)  # look-ahead blue dot
+            cx, cy = track.get_current_position()
+            pcx, pcy = track.predict(PREDICTION_LEAD_SEC)
             bbox = track.get_current_bbox()
             items.append({
-                "track": track,
-                "cx": cx, "cy": cy,           # filtered current position
-                "pred_cx": pcx, "pred_cy": pcy,  # look-ahead prediction
-                "bbox": bbox,
-                "area": bbox["bbox_w"]*bbox["bbox_h"],
+                "track": track, "cx": cx, "cy": cy,
+                "pred_cx": pcx, "pred_cy": pcy,
+                "bbox": bbox, "area": bbox["bbox_w"]*bbox["bbox_h"],
             })
 
     balloons: List[DetectedBalloon] = []
+    primary_pred: Optional[Dict] = None
     primary_item: Optional[Dict] = None
 
     if items:
@@ -288,7 +278,10 @@ def _run_detection_on_frame(
         primary_item = max(red or items, key=lambda it: it["area"])
         t = primary_item["track"]
         t.is_target = True
-
+        primary_pred = {
+            "x": primary_item["pred_cx"], "y": primary_item["pred_cy"],
+            "width": float(w), "height": float(h),
+        }
         bbox = primary_item["bbox"]
         balloons.append(DetectedBalloon(
             id=t.id, color=t.color, size=t.size,
@@ -303,22 +296,16 @@ def _run_detection_on_frame(
             confidence=0.85,
         ))
 
-    if primary_item:
-        # Store BOTH the current filtered position (raw_x/raw_y)
-        # AND the look-ahead prediction (x/y = blue dot).
-        # The PTU controller blends them using FF_GAIN to avoid
-        # permanently trailing behind the target.
+    if primary_pred:
         set_last_prediction(
-            raw_x=primary_item["cx"],         # where target IS now (Kalman filtered)
-            raw_y=primary_item["cy"],
-            pred_x=primary_item["pred_cx"],   # where target WILL BE (look-ahead / blue dot)
-            pred_y=primary_item["pred_cy"],
-            width=w,
-            height=h,
-            timestamp=timestamp,
+            primary_pred["x"], primary_pred["y"],
+            int(primary_pred["width"]), int(primary_pred["height"]),
+            timestamp,
         )
     else:
         clear_last_prediction()
+
+    process_balloon_detection(timestamp, items)
 
     # Kalman debug data for Waterfall log
     kalman_data = None

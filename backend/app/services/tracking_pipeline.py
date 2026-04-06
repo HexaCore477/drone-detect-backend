@@ -37,7 +37,7 @@ PTU_INVERT_PAN  = True
 PTU_INVERT_TILT = False
 
 LASER_OFFSET_X = -10
-LASER_OFFSET_Y =  45
+LASER_OFFSET_Y =  40
 
 PTU_HFOV_DEG = 60.0
 
@@ -45,6 +45,7 @@ PTU_GAIN_H = 0.60
 PTU_GAIN_V = 0.35
 
 # H60 speed range (pulse/s)
+# PTU_MAX_SPEED ~7.5 deg/s at 64-subdivision — fast enough, smooth enough
 PTU_MAX_SPEED = 8000
 PTU_MIN_SPEED = 300
 
@@ -52,6 +53,7 @@ PTU_LOOP_SEC    = 0.05   # 20 Hz
 PTU_DEADBAND_PX = 6      # smoothed error below this → send H65E stop
 
 # Error-space EMA alpha (0 = no smoothing, 1 = frozen)
+# 0.35: fast acquisition, residual sign-flip jitter averaged to zero
 PTU_ERROR_EMA_ALPHA = 0.35
 
 PTU_MAX_VECTOR = 100   # normalised vector magnitude cap fed into H60
@@ -133,20 +135,14 @@ def _ptu_control_loop() -> None:
     """
     20 Hz proportional velocity controller using H60 (continuous joystick mode).
 
-    Tracking target: the Kalman-predicted position (blue dot on frontend).
-    set_last_prediction() in tracking.py stores pred_cx/pred_cy — the EKF
-    look-ahead point — NOT the raw bbox centre.  This function drives that
-    blue dot onto the laser aim point (green circle on frontend).
+    Why H60 instead of H52/H54:
+    - H52 uses trapezoidal accel/decel. At 50 ms loop rate the entire small
+      step is consumed by accel/decel — the motor barely moves.
+    - H60 starts continuous motion instantly, speed proportional to error.
+      Send H65E when inside deadband to stop cleanly.
 
-    Aim point in pixel coords:
-        aim_x = width/2  + LASER_OFFSET_X
-        aim_y = height/2 - LASER_OFFSET_Y   ← note sign: offset moves aim UP
-
-    Error = (predicted_x - aim_x,  aim_y - predicted_y)
-        • positive pan  error → target is RIGHT  of aim → pan right
-        • positive tilt error → target is ABOVE  aim   → tilt up
-
-    PTU_INVERT_PAN/TILT flip the sign to match your PTU's motor direction.
+    Error is smoothed in error-space (not output-space) so sign-flipping
+    residuals near zero average to zero → PTU holds still when locked.
     """
     from app.services import config as config_service
     from app.services import ptu as ptu_service
@@ -154,7 +150,7 @@ def _ptu_control_loop() -> None:
     smooth_err_x: float = 0.0
     smooth_err_y: float = 0.0
     alpha = PTU_ERROR_EMA_ALPHA
-    was_stopped = True
+    was_stopped = True  # avoid spamming H65E when already stopped
 
     try:
         while not _pipeline_stop.is_set():
@@ -177,14 +173,8 @@ def _ptu_control_loop() -> None:
                 smooth_err_y *= (1.0 - alpha)
                 continue
 
-
-            pred_x = pred.get("raw_x", pred["x"])
-            pred_y = pred.get("raw_y", pred["y"])
-
-            FF_GAIN = 0.3
-            pred_x += FF_GAIN * (pred["x"] - pred_x)
-            pred_y += FF_GAIN * (pred["y"] - pred_y)
-
+            pred_x = pred["x"]
+            pred_y = pred["y"]
             width  = pred["width"]
             height = pred["height"]
 
@@ -192,37 +182,28 @@ def _ptu_control_loop() -> None:
             aim_y = (height / 2.0) - LASER_OFFSET_Y
 
             raw_err_x = pred_x - aim_x
-            raw_err_y = aim_y  - pred_y  # flip: positive → target is above aim → tilt up
+            raw_err_y = aim_y  - pred_y   # positive = target above aim → tilt up
 
-            # EMA smoothing in error-space suppresses jitter at the deadband
+            # Smooth in error space — kills sign-flipping jitter at deadband
             smooth_err_x = alpha * raw_err_x + (1.0 - alpha) * smooth_err_x
             smooth_err_y = alpha * raw_err_y + (1.0 - alpha) * smooth_err_y
 
             error_px = (smooth_err_x ** 2 + smooth_err_y ** 2) ** 0.5
 
-            logger.debug(
-                "[PTU] blue_dot=(%.1f,%.1f) aim=(%.1f,%.1f) "
-                "raw_err=(%.1f,%.1f) smooth_err=(%.1f,%.1f) total=%.1fpx",
-                pred_x, pred_y, aim_x, aim_y,
-                raw_err_x, raw_err_y,
-                smooth_err_x, smooth_err_y,
-                error_px,
-            )
-
-            # ── Inside deadband: blue dot is on aim point → hold ────────────
+            # ── Inside deadband: stop and hold ──────────────────────────
             if error_px < PTU_DEADBAND_PX:
                 if not was_stopped:
                     ptu_service.direction("pause")
                     was_stopped = True
                 continue
 
-            # ── Outside deadband: issue H60 velocity command ─────────────────
+            # ── Outside deadband: issue H60 velocity command ─────────────
             deg_per_px = PTU_HFOV_DEG / width
 
             vx = smooth_err_x * deg_per_px * PTU_GAIN_H
             vy = smooth_err_y * deg_per_px * PTU_GAIN_V
 
-            # Normalise so the dominant axis saturates at PTU_MAX_VECTOR
+            # Normalise so dominant axis saturates at PTU_MAX_VECTOR
             max_v = max(abs(vx), abs(vy), 1e-6)
             scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
             a1 = int(round(vx * scale))   # pan  (A1)
@@ -233,10 +214,11 @@ def _ptu_control_loop() -> None:
             if PTU_INVERT_TILT:
                 a2 = -a2
 
-            # Proportional speed: larger pixel error → faster slew
+            # Proportional speed: larger error → faster slew
             norm_err = min(error_px / (width / 4.0), 1.0)
             speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
 
+            # Send H60 directly through the serial write queue
             cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
             try:
                 from app.services.ptu import _command_queue, _drop_old_move_commands
@@ -248,7 +230,10 @@ def _ptu_control_loop() -> None:
             was_stopped = False
 
             logger.debug(
-                "[PTU-H60] vec=(%d,%d) speed=%d",
+                "[PTU-H60] raw_err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "
+                "vec=(%d,%d) speed=%d",
+                raw_err_x, raw_err_y,
+                smooth_err_x, smooth_err_y,
                 a1, a2, speed,
             )
 
