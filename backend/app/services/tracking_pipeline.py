@@ -96,10 +96,14 @@ PTU_MAX_VECTOR = 100
 
 # Prediction lead: how far ahead (seconds) to place the aim point
 # Reduced from 0.35 → 0.25 for tighter tracking response
-PREDICTION_LEAD_SEC = 0.25
+PREDICTION_LEAD_SEC = 0.30
 
 # Staleness guard: ignore predictions older than this
 PREDICTION_MAX_AGE_SEC = 0.15
+
+# Coast: number of cycles to keep moving after detection lost (50ms each)
+# Increased from 0 to 10 = 500ms coast time when detection briefly lost
+PTU_COAST_CYCLES = 10
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +264,8 @@ def _ptu_control_loop() -> None:
     alpha = PTU_ERROR_EMA_ALPHA
 
     was_stopped = True
+    coast_cycles = 0  # Coast counter: keep moving briefly when detection lost
+    is_coasting = False  # Track if we're in coast mode
 
     def _stop_ptu() -> None:
         nonlocal was_stopped
@@ -288,23 +294,105 @@ def _ptu_control_loop() -> None:
 
             # ── Guard: no active prediction ──────────────────────────────────
             if pred is None:
-                _stop_ptu()
-                # Decay smoothed error toward zero instead of hard reset
+                if coast_cycles < PTU_COAST_CYCLES:
+                    coast_cycles += 1
+                    is_coasting = True
+                else:
+                    if not was_stopped:
+                        _stop_ptu()
+                    is_coasting = False
+                    coast_cycles = 0
+                    pid_pan.integral *= 0.90
+                    pid_tilt.integral *= 0.90
+                # Use last known error to keep moving
+                error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
+                if error_px < PTU_DEADBAND_PX:
+                    if not was_stopped:
+                        _stop_ptu()
+                else:
+                    # Continue with last known values
+                    width = width if "width" in dir() else 640
+                    height = height if "height" in dir() else 480
+                    deg_per_px = PTU_HFOV_DEG / max(width, 1.0)
+                    norm_err = min(error_px / (width / 4.0), 1.0)
+                    speed = int(
+                        PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED)
+                    )
+                    # Use same vector direction but reduced
+                    vx = smooth_err_x * deg_per_px * PAN_KP * 0.5
+                    vy = smooth_err_y * deg_per_px * TILT_KP * 0.5
+                    max_v = max(abs(vx), abs(vy), 1e-6)
+                    scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
+                    a1 = int(round(vx * scale))
+                    a2 = int(round(vy * scale))
+                    if PTU_INVERT_PAN:
+                        a1 = -a1
+                    if PTU_INVERT_TILT:
+                        a2 = -a2
+                    cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
+                    print(f"[PTU] Coast: sending H60 vec=({a1},{a2}) speed={speed}")
+                    try:
+                        from app.services.ptu import (
+                            _command_queue,
+                            _drop_old_move_commands,
+                        )
+
+                        _drop_old_move_commands()
+                        _command_queue.put(("write", cmd_bytes))
+                    except Exception as _e:
+                        logger.warning("H60 coast enqueue failed: %s", _e)
+                    was_stopped = False
                 smooth_err_x *= 1.0 - alpha
                 smooth_err_y *= 1.0 - alpha
-                # Decay integral too (target lost → unwind slowly)
-                pid_pan.integral *= 0.90
-                pid_tilt.integral *= 0.90
                 continue
 
             # ── Guard: stale prediction ──────────────────────────────────────
             pred_age = time.time() - pred.get("timestamp", time.time())
             if pred_age > PREDICTION_MAX_AGE_SEC:
-                _stop_ptu()
+                if coast_cycles < PTU_COAST_CYCLES:
+                    coast_cycles += 1
+                    is_coasting = True
+                else:
+                    if not was_stopped:
+                        _stop_ptu()
+                    is_coasting = False
+                    coast_cycles = 0
+                    pid_pan.integral *= 0.90
+                    pid_tilt.integral *= 0.90
+                # Continue with last known values during coast
+                error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
+                if error_px >= PTU_DEADBAND_PX and coast_cycles > 0:
+                    vx = smooth_err_x * deg_per_px * PAN_KP * 0.5
+                    vy = smooth_err_y * deg_per_px * TILT_KP * 0.5
+                    max_v = max(abs(vx), abs(vy), 1e-6)
+                    scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
+                    a1 = int(round(vx * scale))
+                    a2 = int(round(vy * scale))
+                    if PTU_INVERT_PAN:
+                        a1 = -a1
+                    if PTU_INVERT_TILT:
+                        a2 = -a2
+                    width = pred.get("width", 640)
+                    height = pred.get("height", 480)
+                    norm_err = min(error_px / (width / 4.0), 1.0)
+                    speed = int(
+                        PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED)
+                    )
+                    cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
+                    print(f"[PTU] Coast: sending H60 vec=({a1},{a2}) speed={speed}")
+                    try:
+                        from app.services.ptu import (
+                            _command_queue,
+                            _drop_old_move_commands,
+                        )
+
+                        _drop_old_move_commands()
+                        _command_queue.put(("write", cmd_bytes))
+                    except Exception as _e:
+                        logger.warning("H60 coast enqueue failed: %s", _e)
+                    was_stopped = False
                 smooth_err_x *= 1.0 - alpha
                 smooth_err_y *= 1.0 - alpha
-                pid_pan.integral *= 0.90
-                pid_tilt.integral *= 0.90
                 continue
 
             # ── Compute pixel errors ─────────────────────────────────────────
@@ -312,6 +400,9 @@ def _ptu_control_loop() -> None:
             pred_y = pred["y"]
             width = pred["width"]
             height = pred["height"]
+
+            # Valid prediction received — reset coast counter
+            coast_cycles = 0
 
             aim_x = (width / 2.0) + LASER_OFFSET_X
             aim_y = (height / 2.0) - LASER_OFFSET_Y
@@ -377,6 +468,7 @@ def _ptu_control_loop() -> None:
 
             # ── Send H60 directly through the serial write queue ─────────────
             cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
+            print(f"[PTU] Sending H60 vec=({a1},{a2}) speed={speed}")
             try:
                 from app.services.ptu import _command_queue, _drop_old_move_commands
 
