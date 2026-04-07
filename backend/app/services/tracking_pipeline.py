@@ -3,14 +3,6 @@ Asynchronous tracking pipeline with three parallel threads:
   Thread 1: Grab frames continuously -> Shared Buffer
   Thread 2: Run detection on frames from buffer -> shared_target_position
   Thread 3: PID + feedforward velocity-mode PTU controller (H60)
-
-Controller design:
-  - Full PID (P + I + D) on pixel error
-  - Velocity feedforward from Kalman state (vx, vy)
-  - Integral anti-windup (clamp + conditional integration)
-  - Derivative on measurement (not on error) to avoid derivative kick
-  - Direct serial write (bypasses command queue for minimum latency)
-  - Staleness guard: skips predictions older than 150 ms
 """
 
 from __future__ import annotations
@@ -28,7 +20,7 @@ logger = logging.getLogger(__name__)
 # --- GLOBAL SHARED STATE ---
 _frame_lock = threading.Lock()
 _current_frame: Optional[cv2.Mat] = None
-_current_frame_time: float = 0.0  # timestamp when frame was grabbed
+_current_frame_time: float = 0.0
 _pipeline_stop = threading.Event()
 
 # Thread handles
@@ -51,51 +43,38 @@ LASER_OFFSET_Y = 40
 
 PTU_HFOV_DEG = 60.0
 
-# ── PID gains (pan axis) ────────────────────────────────────────────────────
 PAN_KP = 1.80
 PAN_KI = 0.10
 PAN_KD = 0.25
 
-# ── PID gains (tilt axis) ───────────────────────────────────────────────────
 TILT_KP = 1.20
 TILT_KI = 0.06
 TILT_KD = 0.18
 
-# ── Velocity feedforward gains ──────────────────────────────────────────────
-PTU_GAIN_VX = 0.60  # pan  feedforward
-PTU_GAIN_VY = 0.40  # tilt feedforward
+PTU_GAIN_VX = 0.60
+PTU_GAIN_VY = 0.40
 
-# ── Integral anti-windup clamp (in degree-equivalent units) ─────────────────
 PAN_INTEGRAL_CLAMP = 15.0
 TILT_INTEGRAL_CLAMP = 10.0
 
-# ── Integral conditional: only integrate when error is small enough ──────────
 INTEGRAL_ENABLE_THRESHOLD_PX = 50
 
-# H60 speed range (pulse/s)
 PTU_MAX_SPEED = 10000
 PTU_MIN_SPEED = 300
 
-PTU_LOOP_SEC = 0.015  # ~67 Hz control loop
+PTU_LOOP_SEC = 0.015  # ~67 Hz
 
-# Deadband: inside this radius (px) PTU stops and holds
 PTU_DEADBAND_PX = 8
 
-# EMA alpha on raw error before PID (anti-jitter)
-# At 67Hz, alpha=0.25 gives ~60ms time constant (4 frames) — responsive but smooth
 PTU_ERROR_EMA_ALPHA = 0.25
 
-# Normalised H60 vector magnitude cap
 PTU_MAX_VECTOR = 100
 
-# Prediction lead: how far ahead (seconds) to place the aim point
 PREDICTION_LEAD_SEC = 0.25
 
-# Staleness guard: ignore predictions older than this
 PREDICTION_MAX_AGE_SEC = 0.20
 
-# Coast: number of cycles to keep moving after detection lost
-PTU_COAST_CYCLES = 15  # ~225ms at 67Hz
+PTU_COAST_CYCLES = 15
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +119,7 @@ def _detection_loop() -> None:
     global _latest_result
     tracks: Dict = {}
     next_track_id = 0
-    last_frame_time = 0.0  # track by timestamp, not id
+    last_frame_time = 0.0
 
     try:
         while not _pipeline_stop.is_set():
@@ -170,11 +149,7 @@ def _detection_loop() -> None:
 # PID state container
 # ---------------------------------------------------------------------------
 class _PIDAxis:
-    """Single-axis PID with anti-windup and derivative-on-measurement."""
-
-    def __init__(
-        self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float
-    ):
+    def __init__(self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -189,19 +164,12 @@ class _PIDAxis:
         self.prev_measurement = 0.0
         self._initialised = False
 
-    def compute(
-        self,
-        error: float,
-        measurement: float,
-        enable_integral: bool = True,
-    ) -> float:
+    def compute(self, error: float, measurement: float, enable_integral: bool = True) -> float:
         p_term = self.kp * error
 
         if enable_integral:
             self.integral += error * self.dt
-            self.integral = max(
-                -self.integral_clamp, min(self.integral_clamp, self.integral)
-            )
+            self.integral = max(-self.integral_clamp, min(self.integral_clamp, self.integral))
         i_term = self.ki * self.integral
 
         if not self._initialised:
@@ -215,42 +183,9 @@ class _PIDAxis:
 
 
 # ---------------------------------------------------------------------------
-# Direct serial write helper (bypasses command queue for minimum latency)
-# ---------------------------------------------------------------------------
-def _direct_serial_write(data: bytes) -> bool:
-    """
-    Write directly to the PTU serial port, bypassing the command queue.
-    This eliminates up to 200ms of queuing latency for time-critical H60 commands.
-    Returns True if write succeeded.
-    """
-    from app.services import ptu as ptu_service
-
-    ser = ptu_service._serial
-    if ser is None or not ser.is_open:
-        return False
-    try:
-        with ptu_service._serial_lock:
-            ser.write(data)
-            ser.flush()
-        return True
-    except Exception as e:
-        logger.warning("Direct serial write failed: %s", e)
-        return False
-
-
-def _direct_pause() -> bool:
-    """Send pause command directly to serial port."""
-    return _direct_serial_write(b"H65E")
-
-
-# ---------------------------------------------------------------------------
 # Thread 3 — PID + feedforward PTU controller (H60)
 # ---------------------------------------------------------------------------
 def _ptu_control_loop() -> None:
-    """
-    ~67 Hz PID + velocity-feedforward controller using H60 continuous mode.
-    Uses direct serial writes to minimize latency.
-    """
     from app.services import config as config_service
     from app.services import ptu as ptu_service
 
@@ -266,7 +201,6 @@ def _ptu_control_loop() -> None:
     was_stopped = True
     coast_cycles = 0
 
-    # Cache last known frame dimensions for coast mode
     last_width: float = 1280.0
     last_height: float = 720.0
     last_deg_per_px: float = PTU_HFOV_DEG / 1280.0
@@ -274,7 +208,7 @@ def _ptu_control_loop() -> None:
     def _stop_ptu() -> None:
         nonlocal was_stopped
         if not was_stopped:
-            _direct_pause()
+            ptu_service.write_raw(b"H65E")
             was_stopped = True
 
     def _reset_all() -> None:
@@ -288,24 +222,28 @@ def _ptu_control_loop() -> None:
     def _send_h60(a1: int, a2: int, speed: int) -> None:
         nonlocal was_stopped
         cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
-        if _direct_serial_write(cmd_bytes):
+        if ptu_service.write_raw(cmd_bytes):
             was_stopped = False
-            # Also broadcast for waterfall log (non-blocking)
+            # Broadcast for waterfall log (best-effort)
             try:
                 import queue as _q
                 ptu_service._command_broadcast_queue.put_nowait(cmd_bytes.decode("ascii"))
             except (_q.Full, Exception):
-                pass
+                try:
+                    ptu_service._command_broadcast_queue.get_nowait()
+                    ptu_service._command_broadcast_queue.put_nowait(cmd_bytes.decode("ascii"))
+                except Exception:
+                    pass
 
     try:
         while not _pipeline_stop.is_set():
             loop_start = time.monotonic()
 
-            # ── Guard: auto-tracking must be on and PTU connected ────────────
             if not config_service.get_auto_tracking() or not ptu_service.is_connected():
                 _stop_ptu()
                 _reset_all()
-                time.sleep(dt)
+                elapsed = time.monotonic() - loop_start
+                time.sleep(max(0, dt - elapsed))
                 continue
 
             pred = _get_last_prediction_from_pipeline()
@@ -320,10 +258,9 @@ def _ptu_control_loop() -> None:
                     smooth_err_x *= 0.9
                     smooth_err_y *= 0.9
                 else:
-                    # Coast: keep moving with decaying error
                     error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
                     if error_px >= PTU_DEADBAND_PX:
-                        decay = 0.85  # decay per cycle during coast
+                        decay = 0.85
                         smooth_err_x *= decay
                         smooth_err_y *= decay
                         vx = smooth_err_x * last_deg_per_px * PAN_KP * 0.5
@@ -346,7 +283,7 @@ def _ptu_control_loop() -> None:
                 time.sleep(max(0, dt - elapsed))
                 continue
 
-            # ── Guard: stale prediction ──────────────────────────────────────
+            # ── Stale prediction: coast or stop ──────────────────────────────
             pred_age = time.time() - pred.get("timestamp", time.time())
             if pred_age > PREDICTION_MAX_AGE_SEC:
                 coast_cycles += 1
@@ -358,7 +295,7 @@ def _ptu_control_loop() -> None:
                 time.sleep(max(0, dt - elapsed))
                 continue
 
-            # ── Valid prediction: reset coast ─────────────────────────────────
+            # ── Valid prediction ──────────────────────────────────────────────
             coast_cycles = 0
 
             pred_x = pred["x"]
@@ -366,7 +303,6 @@ def _ptu_control_loop() -> None:
             width = pred["width"]
             height = pred["height"]
 
-            # Cache for coast mode
             last_width = width
             last_height = height
 
@@ -376,26 +312,22 @@ def _ptu_control_loop() -> None:
             raw_err_x = pred_x - aim_x
             raw_err_y = aim_y - pred_y
 
-            # ── EMA smoothing ────────────────────────────────────────────────
             smooth_err_x = alpha * raw_err_x + (1.0 - alpha) * smooth_err_x
             smooth_err_y = alpha * raw_err_y + (1.0 - alpha) * smooth_err_y
 
             error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
 
-            # ── Deadband ─────────────────────────────────────────────────────
             if error_px < PTU_DEADBAND_PX:
                 _stop_ptu()
                 elapsed = time.monotonic() - loop_start
                 time.sleep(max(0, dt - elapsed))
                 continue
 
-            # ── Angle scaling ────────────────────────────────────────────────
             deg_per_px = PTU_HFOV_DEG / max(width, 1.0)
             last_deg_per_px = deg_per_px
 
             enable_int = error_px < INTEGRAL_ENABLE_THRESHOLD_PX
 
-            # ── PID output ───────────────────────────────────────────────────
             out_x = pid_pan.compute(
                 smooth_err_x * deg_per_px,
                 raw_err_x * deg_per_px,
@@ -407,14 +339,12 @@ def _ptu_control_loop() -> None:
                 enable_integral=enable_int,
             )
 
-            # ── Velocity feedforward ─────────────────────────────────────────
             ff_vx = pred.get("vx", 0.0) * deg_per_px * PTU_GAIN_VX
             ff_vy = pred.get("vy", 0.0) * deg_per_px * PTU_GAIN_VY
 
             vx = out_x + ff_vx
             vy = out_y - ff_vy
 
-            # ── Normalise to H60 vector ──────────────────────────────────────
             max_v = max(abs(vx), abs(vy), 1e-6)
             scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
             a1 = int(round(vx * scale))
@@ -425,11 +355,9 @@ def _ptu_control_loop() -> None:
             if PTU_INVERT_TILT:
                 a2 = -a2
 
-            # ── Speed ────────────────────────────────────────────────────────
             norm_err = min(error_px / (width / 4.0), 1.0)
             speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
 
-            # ── Send H60 directly ────────────────────────────────────────────
             _send_h60(a1, a2, speed)
 
             logger.debug(
@@ -470,12 +398,8 @@ def start_pipeline() -> None:
         logger.warning("Pipeline already running")
         return
     _pipeline_stop.clear()
-    _capture_thread = threading.Thread(
-        target=_capture_loop, daemon=True, name="capture"
-    )
-    _detection_thread = threading.Thread(
-        target=_detection_loop, daemon=True, name="detection"
-    )
+    _capture_thread = threading.Thread(target=_capture_loop, daemon=True, name="capture")
+    _detection_thread = threading.Thread(target=_detection_loop, daemon=True, name="detection")
     _ptu_thread = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
     _capture_thread.start()
     _detection_thread.start()
