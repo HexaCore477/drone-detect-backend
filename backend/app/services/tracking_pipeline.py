@@ -12,6 +12,7 @@ Controller design:
   - Reduced EMA alpha for faster response
   - Staleness guard: skips predictions older than 150 ms
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,9 +31,9 @@ _current_frame: Optional[cv2.Mat] = None
 _pipeline_stop = threading.Event()
 
 # Thread handles
-_capture_thread:   Optional[threading.Thread] = None
+_capture_thread: Optional[threading.Thread] = None
 _detection_thread: Optional[threading.Thread] = None
-_ptu_thread:       Optional[threading.Thread] = None
+_ptu_thread: Optional[threading.Thread] = None
 
 # Shared result for WebSocket consumers
 _result_lock = threading.Lock()
@@ -41,11 +42,11 @@ _latest_result: Optional[Dict[str, Any]] = None
 # ---------------------------------------------------------------------------
 # PTU controller constants
 # ---------------------------------------------------------------------------
-PTU_INVERT_PAN  = True
+PTU_INVERT_PAN = True
 PTU_INVERT_TILT = False
 
 LASER_OFFSET_X = -10
-LASER_OFFSET_Y =  40
+LASER_OFFSET_Y = 40
 
 PTU_HFOV_DEG = 60.0
 
@@ -53,12 +54,12 @@ PTU_HFOV_DEG = 60.0
 # Kp: proportional — main driving force toward center
 # Ki: integral     — eliminates steady-state offset (target never reaches center)
 # Kd: derivative   — damps oscillation / overshoot
-PAN_KP  = 1.20
-PAN_KI  = 0.08   # small: we don't want slow windup to fight fast motion
-PAN_KD  = 0.30
+PAN_KP = 1.50
+PAN_KI = 0.08  # small: we don't want slow windup to fight fast motion
+PAN_KD = 0.30
 
 # ── PID gains (tilt axis) ───────────────────────────────────────────────────
-TILT_KP = 0.80
+TILT_KP = 1.00
 TILT_KI = 0.05
 TILT_KD = 0.20
 
@@ -69,12 +70,12 @@ PTU_GAIN_VY = 0.35  # tilt feedforward
 
 # ── Integral anti-windup clamp (in degree-equivalent units) ─────────────────
 # Prevents integral from accumulating when target is far out of frame
-PAN_INTEGRAL_CLAMP  = 15.0
+PAN_INTEGRAL_CLAMP = 15.0
 TILT_INTEGRAL_CLAMP = 10.0
 
 # ── Integral conditional: only integrate when error is small enough ──────────
 # Avoids integral windup during large slews
-INTEGRAL_ENABLE_THRESHOLD_PX = 80
+INTEGRAL_ENABLE_THRESHOLD_PX = 50
 
 # H60 speed range (pulse/s)
 PTU_MAX_SPEED = 10000
@@ -83,8 +84,8 @@ PTU_MIN_SPEED = 300
 PTU_LOOP_SEC = 0.02  # 50 Hz — must match dt used in integral/derivative
 
 # Deadband: inside this radius (px) PTU stops and holds
-# Reduced from 6 → 2 for better centering
-PTU_DEADBAND_PX = 2
+# Increased from 2 → 10 to prevent oscillation during slow drone movement
+PTU_DEADBAND_PX = 10
 
 # EMA alpha on raw error before PID (anti-jitter, not anti-response)
 # Reduced from 0.15 → 0.08 — faster response with less smoothing
@@ -176,7 +177,9 @@ def _detection_loop() -> None:
 class _PIDAxis:
     """Single-axis PID with anti-windup and derivative-on-measurement."""
 
-    def __init__(self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float):
+    def __init__(
+        self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float
+    ):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -184,7 +187,7 @@ class _PIDAxis:
         self.dt = dt
         # state
         self.integral: float = 0.0
-        self.prev_measurement: float = 0.0   # derivative on measurement
+        self.prev_measurement: float = 0.0  # derivative on measurement
         self._initialised: bool = False
 
     def reset(self) -> None:
@@ -215,8 +218,9 @@ class _PIDAxis:
         if enable_integral:
             self.integral += error * self.dt
             # Hard clamp
-            self.integral = max(-self.integral_clamp,
-                                min(self.integral_clamp, self.integral))
+            self.integral = max(
+                -self.integral_clamp, min(self.integral_clamp, self.integral)
+            )
         i_term = self.ki * self.integral
 
         # ── Derivative on measurement (avoids derivative kick on setpoint jump) ─
@@ -247,7 +251,7 @@ def _ptu_control_loop() -> None:
     dt = PTU_LOOP_SEC
 
     # Independent PID instances per axis
-    pid_pan  = _PIDAxis(PAN_KP,  PAN_KI,  PAN_KD,  PAN_INTEGRAL_CLAMP,  dt)
+    pid_pan = _PIDAxis(PAN_KP, PAN_KI, PAN_KD, PAN_INTEGRAL_CLAMP, dt)
     pid_tilt = _PIDAxis(TILT_KP, TILT_KI, TILT_KD, TILT_INTEGRAL_CLAMP, dt)
 
     # EMA state
@@ -286,10 +290,10 @@ def _ptu_control_loop() -> None:
             if pred is None:
                 _stop_ptu()
                 # Decay smoothed error toward zero instead of hard reset
-                smooth_err_x *= (1.0 - alpha)
-                smooth_err_y *= (1.0 - alpha)
+                smooth_err_x *= 1.0 - alpha
+                smooth_err_y *= 1.0 - alpha
                 # Decay integral too (target lost → unwind slowly)
-                pid_pan.integral  *= 0.90
+                pid_pan.integral *= 0.90
                 pid_tilt.integral *= 0.90
                 continue
 
@@ -297,29 +301,29 @@ def _ptu_control_loop() -> None:
             pred_age = time.time() - pred.get("timestamp", time.time())
             if pred_age > PREDICTION_MAX_AGE_SEC:
                 _stop_ptu()
-                smooth_err_x *= (1.0 - alpha)
-                smooth_err_y *= (1.0 - alpha)
-                pid_pan.integral  *= 0.90
+                smooth_err_x *= 1.0 - alpha
+                smooth_err_y *= 1.0 - alpha
+                pid_pan.integral *= 0.90
                 pid_tilt.integral *= 0.90
                 continue
 
             # ── Compute pixel errors ─────────────────────────────────────────
             pred_x = pred["x"]
             pred_y = pred["y"]
-            width  = pred["width"]
+            width = pred["width"]
             height = pred["height"]
 
-            aim_x = (width  / 2.0) + LASER_OFFSET_X
+            aim_x = (width / 2.0) + LASER_OFFSET_X
             aim_y = (height / 2.0) - LASER_OFFSET_Y
 
             raw_err_x = pred_x - aim_x
-            raw_err_y = aim_y  - pred_y   # positive = target above aim → tilt up
+            raw_err_y = aim_y - pred_y  # positive = target above aim → tilt up
 
             # ── EMA smoothing (anti-jitter, low alpha = fast response) ───────
             smooth_err_x = alpha * raw_err_x + (1.0 - alpha) * smooth_err_x
             smooth_err_y = alpha * raw_err_y + (1.0 - alpha) * smooth_err_y
 
-            error_px = (smooth_err_x ** 2 + smooth_err_y ** 2) ** 0.5
+            error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
 
             # ── Deadband: inside this radius hold still ──────────────────────
             if error_px < PTU_DEADBAND_PX:
@@ -340,12 +344,12 @@ def _ptu_control_loop() -> None:
             # ── PID output (in degree-equivalent units) ──────────────────────
             out_x = pid_pan.compute(
                 smooth_err_x * deg_per_px,
-                raw_err_x    * deg_per_px,
+                raw_err_x * deg_per_px,
                 enable_integral=enable_int,
             )
             out_y = pid_tilt.compute(
                 smooth_err_y * deg_per_px,
-                raw_err_y    * deg_per_px,
+                raw_err_y * deg_per_px,
                 enable_integral=enable_int,
             )
 
@@ -354,13 +358,13 @@ def _ptu_control_loop() -> None:
             ff_vy = pred.get("vy", 0.0) * deg_per_px * PTU_GAIN_VY
 
             vx = out_x + ff_vx
-            vy = out_y - ff_vy   # vy: downward motion → push down
+            vy = out_y - ff_vy  # vy: downward motion → push down
 
             # ── Normalise to H60 vector space ────────────────────────────────
             max_v = max(abs(vx), abs(vy), 1e-6)
             scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
-            a1 = int(round(vx * scale))   # pan  (A1)
-            a2 = int(round(vy * scale))   # tilt (A2)
+            a1 = int(round(vx * scale))  # pan  (A1)
+            a2 = int(round(vy * scale))  # tilt (A2)
 
             if PTU_INVERT_PAN:
                 a1 = -a1
@@ -375,6 +379,7 @@ def _ptu_control_loop() -> None:
             cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
             try:
                 from app.services.ptu import _command_queue, _drop_old_move_commands
+
                 _drop_old_move_commands()
                 _command_queue.put(("write", cmd_bytes))
             except Exception as _e:
@@ -386,12 +391,20 @@ def _ptu_control_loop() -> None:
                 "[PID-H60] err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "
                 "pid=(%.2f,%.2f) ff=(%.2f,%.2f) int=(%.3f,%.3f) "
                 "vec=(%d,%d) speed=%d age=%.3fs",
-                raw_err_x, raw_err_y,
-                smooth_err_x, smooth_err_y,
-                out_x, out_y,
-                ff_vx, ff_vy,
-                pid_pan.integral, pid_tilt.integral,
-                a1, a2, speed, pred_age,
+                raw_err_x,
+                raw_err_y,
+                smooth_err_x,
+                smooth_err_y,
+                out_x,
+                out_y,
+                ff_vx,
+                ff_vy,
+                pid_pan.integral,
+                pid_tilt.integral,
+                a1,
+                a2,
+                speed,
+                pred_age,
             )
 
     except Exception as e:
@@ -408,6 +421,7 @@ def get_current_frame_for_stream() -> Optional[cv2.Mat]:
 
 def _get_last_prediction_from_pipeline() -> Optional[Dict[str, float]]:
     from app.api.routes.tracking import get_last_prediction
+
     return get_last_prediction()
 
 
@@ -417,9 +431,13 @@ def start_pipeline() -> None:
         logger.warning("Pipeline already running")
         return
     _pipeline_stop.clear()
-    _capture_thread   = threading.Thread(target=_capture_loop,     daemon=True, name="capture")
-    _detection_thread = threading.Thread(target=_detection_loop,   daemon=True, name="detection")
-    _ptu_thread       = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
+    _capture_thread = threading.Thread(
+        target=_capture_loop, daemon=True, name="capture"
+    )
+    _detection_thread = threading.Thread(
+        target=_detection_loop, daemon=True, name="detection"
+    )
+    _ptu_thread = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
     _capture_thread.start()
     _detection_thread.start()
     _ptu_thread.start()
