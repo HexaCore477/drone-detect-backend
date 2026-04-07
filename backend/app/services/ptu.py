@@ -379,20 +379,17 @@ def _drop_old_position_queries() -> None:
     for item in kept:
         _command_queue.put(item)
 
-
 def write_raw(data: bytes) -> bool:
     """
     Enqueue a raw serial write command for the worker thread.
-    Used by the tracking pipeline for low-latency H60 commands.
-    Drops older move/write commands first so only the freshest runs.
-    Returns True if enqueued, False if not connected.
     """
     if _serial is None or not _serial.is_open:
         return False
-    _drop_old_move_commands()
     try:
         _command_queue.put_nowait(("write", data))
         return True
+    except queue.Full:
+        return False
     except Exception:
         return False
 
