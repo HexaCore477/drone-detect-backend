@@ -303,6 +303,19 @@ def _serial_worker() -> None:
 
                     elif cmd[0] == "write":
                         _, data = cmd
+                        while True:
+                            try:
+                                peek = _command_queue.get_nowait()
+                                if peek is _STOP:
+                                    _command_queue.put(peek)  # put it back
+                                    break
+                                if isinstance(peek, tuple) and peek[0] == "write":
+                                    data = peek[1]  # use newer data instead
+                                else:
+                                    _command_queue.put(peek)  # put non-write back
+                                    break
+                            except queue.Empty:
+                                break
                         _serial.write(data)
                         _serial.flush()
 
