@@ -64,8 +64,8 @@ TILT_KD = 0.20
 
 # ── Velocity feedforward gains ──────────────────────────────────────────────
 # Applied to Kalman vx/vy (px/s) to anticipate target motion before error builds
-PTU_GAIN_VX = 0.40   # pan  feedforward
-PTU_GAIN_VY = 0.25   # tilt feedforward
+PTU_GAIN_VX = 0.55  # pan  feedforward
+PTU_GAIN_VY = 0.35  # tilt feedforward
 
 # ── Integral anti-windup clamp (in degree-equivalent units) ─────────────────
 # Prevents integral from accumulating when target is far out of frame
@@ -77,27 +77,25 @@ TILT_INTEGRAL_CLAMP = 10.0
 INTEGRAL_ENABLE_THRESHOLD_PX = 80
 
 # H60 speed range (pulse/s)
-PTU_MAX_SPEED = 8000
+PTU_MAX_SPEED = 10000
 PTU_MIN_SPEED = 300
 
-PTU_LOOP_SEC = 0.05   # 20 Hz — must match dt used in integral/derivative
+PTU_LOOP_SEC = 0.02  # 50 Hz — must match dt used in integral/derivative
 
 # Deadband: inside this radius (px) PTU stops and holds
 # Reduced from 6 → 2 for better centering
 PTU_DEADBAND_PX = 2
 
 # EMA alpha on raw error before PID (anti-jitter, not anti-response)
-# Reduced from 0.35 → 0.15 — much less control delay
-PTU_ERROR_EMA_ALPHA = 0.15
+# Reduced from 0.15 → 0.08 — faster response with less smoothing
+PTU_ERROR_EMA_ALPHA = 0.08
 
 # Normalised H60 vector magnitude cap
 PTU_MAX_VECTOR = 100
 
 # Prediction lead: how far ahead (seconds) to place the aim point
-# Increased from 0.2 → 0.35 to cover realistic total pipeline latency:
-#   camera buffer ~50ms + YOLO ~80ms + thread sync ~20ms
-#   + PTU loop ~50ms + mechanical ~100ms  ≈ 300-400ms total
-PREDICTION_LEAD_SEC = 0.35
+# Reduced from 0.35 → 0.25 for tighter tracking response
+PREDICTION_LEAD_SEC = 0.25
 
 # Staleness guard: ignore predictions older than this
 PREDICTION_MAX_AGE_SEC = 0.15
