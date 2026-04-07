@@ -130,7 +130,7 @@ _serial: Optional["serial.Serial"] = None
 _connected_port: Optional[str] = None
 _connected_baud: Optional[int] = None
 _worker_thread: Optional[threading.Thread] = None
-_serial_lock = threading.Lock()
+_serial_lock = threading.RLock()
 _command_queue: queue.Queue = queue.Queue()
 _worker_stop = threading.Event()
 
@@ -208,7 +208,7 @@ def _serial_worker() -> None:
     global _serial, _connected_port, _connected_baud
     while not _worker_stop.is_set():
         try:
-            cmd = _command_queue.get(timeout=0.2)
+            cmd = _command_queue.get(timeout=0.02)
             if cmd is _STOP:
                 break
             try:
