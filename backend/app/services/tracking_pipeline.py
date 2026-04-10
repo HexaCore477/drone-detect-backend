@@ -181,7 +181,7 @@ class _PIDAxis:
             self._initialised = True
         d_error = (error - self.prev_error) / self.dt
         self.prev_error = error
-        d_term = self.kd * d_error
+        d_term = -self.kd * d_error
 
         return p_term + i_term + d_term
 
@@ -356,8 +356,8 @@ def _ptu_control_loop() -> None:
             vx_kalman = pred.get("vx", 0.0)
             vy_kalman = pred.get("vy", 0.0)
             adaptive_lead = measured_latency + PREDICTION_LEAD_SEC
-            ff_vx = vx_kalman * deg_per_px * PTU_GAIN_VX * adaptive_lead * 20.0
-            ff_vy = vy_kalman * deg_per_px * PTU_GAIN_VY * adaptive_lead * 20.0
+            ff_vx = vx_kalman * deg_per_px * PTU_GAIN_VX * adaptive_lead
+            ff_vy = vy_kalman * deg_per_px * PTU_GAIN_VY * adaptive_lead
 
             vx = out_x + ff_vx
             vy = out_y - ff_vy
