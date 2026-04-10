@@ -51,8 +51,8 @@ TILT_KP = 1.20
 TILT_KI = 0.36
 TILT_KD = 0.38
 
-PTU_GAIN_VX = 0.60
-PTU_GAIN_VY = 0.40
+PTU_GAIN_VX = 1.0
+PTU_GAIN_VY = 0.8
 
 PAN_INTEGRAL_CLAMP = 15.0
 TILT_INTEGRAL_CLAMP = 10.0
@@ -70,7 +70,7 @@ PTU_ERROR_EMA_ALPHA = 0.25
 
 PTU_MAX_VECTOR = 100
 
-PREDICTION_LEAD_SEC = 0.25
+PREDICTION_LEAD_SEC = 0.30
 
 PREDICTION_MAX_AGE_SEC = 0.20
 
@@ -149,7 +149,9 @@ def _detection_loop() -> None:
 # PID state container
 # ---------------------------------------------------------------------------
 class _PIDAxis:
-    def __init__(self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float):
+    def __init__(
+        self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float
+    ):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -164,12 +166,16 @@ class _PIDAxis:
         self.prev_measurement = 0.0
         self._initialised = False
 
-    def compute(self, error: float, measurement: float, enable_integral: bool = True) -> float:
+    def compute(
+        self, error: float, measurement: float, enable_integral: bool = True
+    ) -> float:
         p_term = self.kp * error
 
         if enable_integral:
             self.integral += error * self.dt
-            self.integral = max(-self.integral_clamp, min(self.integral_clamp, self.integral))
+            self.integral = max(
+                -self.integral_clamp, min(self.integral_clamp, self.integral)
+            )
         i_term = self.ki * self.integral
 
         if not self._initialised:
@@ -227,11 +233,16 @@ def _ptu_control_loop() -> None:
             # Broadcast for waterfall log (best-effort)
             try:
                 import queue as _q
-                ptu_service._command_broadcast_queue.put_nowait(cmd_bytes.decode("ascii"))
+
+                ptu_service._command_broadcast_queue.put_nowait(
+                    cmd_bytes.decode("ascii")
+                )
             except (_q.Full, Exception):
                 try:
                     ptu_service._command_broadcast_queue.get_nowait()
-                    ptu_service._command_broadcast_queue.put_nowait(cmd_bytes.decode("ascii"))
+                    ptu_service._command_broadcast_queue.put_nowait(
+                        cmd_bytes.decode("ascii")
+                    )
                 except Exception:
                     pass
 
@@ -274,7 +285,9 @@ def _ptu_control_loop() -> None:
                         if PTU_INVERT_TILT:
                             a2 = -a2
                         norm_err = min(error_px / (last_width / 4.0), 1.0)
-                        speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
+                        speed = int(
+                            PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED)
+                        )
                         _send_h60(a1, a2, speed)
                     else:
                         _stop_ptu()
@@ -364,12 +377,20 @@ def _ptu_control_loop() -> None:
                 "[PID-H60] err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "
                 "pid=(%.2f,%.2f) ff=(%.2f,%.2f) int=(%.3f,%.3f) "
                 "vec=(%d,%d) speed=%d age=%.3fs",
-                raw_err_x, raw_err_y,
-                smooth_err_x, smooth_err_y,
-                out_x, out_y,
-                ff_vx, ff_vy,
-                pid_pan.integral, pid_tilt.integral,
-                a1, a2, speed, pred_age,
+                raw_err_x,
+                raw_err_y,
+                smooth_err_x,
+                smooth_err_y,
+                out_x,
+                out_y,
+                ff_vx,
+                ff_vy,
+                pid_pan.integral,
+                pid_tilt.integral,
+                a1,
+                a2,
+                speed,
+                pred_age,
             )
 
             elapsed = time.monotonic() - loop_start
@@ -389,6 +410,7 @@ def get_current_frame_for_stream() -> Optional[cv2.Mat]:
 
 def _get_last_prediction_from_pipeline() -> Optional[Dict[str, float]]:
     from app.api.routes.tracking import get_last_prediction
+
     return get_last_prediction()
 
 
@@ -398,8 +420,12 @@ def start_pipeline() -> None:
         logger.warning("Pipeline already running")
         return
     _pipeline_stop.clear()
-    _capture_thread = threading.Thread(target=_capture_loop, daemon=True, name="capture")
-    _detection_thread = threading.Thread(target=_detection_loop, daemon=True, name="detection")
+    _capture_thread = threading.Thread(
+        target=_capture_loop, daemon=True, name="capture"
+    )
+    _detection_thread = threading.Thread(
+        target=_detection_loop, daemon=True, name="detection"
+    )
     _ptu_thread = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
     _capture_thread.start()
     _detection_thread.start()
