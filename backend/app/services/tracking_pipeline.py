@@ -149,39 +149,35 @@ def _detection_loop() -> None:
 # PID state container
 # ---------------------------------------------------------------------------
 class _PIDAxis:
-    def __init__(
-        self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float
-    ):
+    def __init__(self, kp: float, ki: float, kd: float, integral_clamp: float, dt: float):
         self.kp = kp
         self.ki = ki
         self.kd = kd
         self.integral_clamp = integral_clamp
         self.dt = dt
         self.integral: float = 0.0
-        self.prev_error: float = 0.0
+        self.prev_measurement: float = 0.0
         self._initialised: bool = False
 
     def reset(self) -> None:
         self.integral = 0.0
-        self.prev_error = 0.0
+        self.prev_measurement = 0.0
         self._initialised = False
 
-    def compute(self, error: float, enable_integral: bool = True) -> float:
+    def compute(self, error: float, measurement: float, enable_integral: bool = True) -> float:
         p_term = self.kp * error
 
         if enable_integral:
             self.integral += error * self.dt
-            self.integral = max(
-                -self.integral_clamp, min(self.integral_clamp, self.integral)
-            )
+            self.integral = max(-self.integral_clamp, min(self.integral_clamp, self.integral))
         i_term = self.ki * self.integral
 
         if not self._initialised:
-            self.prev_error = error
+            self.prev_measurement = measurement
             self._initialised = True
-        d_error = (error - self.prev_error) / self.dt
-        self.prev_error = error
-        d_term = self.kd * d_error
+        d_meas = (measurement - self.prev_measurement) / self.dt
+        self.prev_measurement = measurement
+        d_term = -self.kd * d_meas
 
         return p_term + i_term + d_term
 
@@ -208,9 +204,6 @@ def _ptu_control_loop() -> None:
     last_width: float = 1280.0
     last_height: float = 720.0
     last_deg_per_px: float = PTU_HFOV_DEG / 1280.0
-    last_vx: float = 0.0
-    last_vy: float = 0.0
-    measured_latency: float = 0.05
 
     def _stop_ptu() -> None:
         nonlocal was_stopped
@@ -234,16 +227,11 @@ def _ptu_control_loop() -> None:
             # Broadcast for waterfall log (best-effort)
             try:
                 import queue as _q
-
-                ptu_service._command_broadcast_queue.put_nowait(
-                    cmd_bytes.decode("ascii")
-                )
+                ptu_service._command_broadcast_queue.put_nowait(cmd_bytes.decode("ascii"))
             except (_q.Full, Exception):
                 try:
                     ptu_service._command_broadcast_queue.get_nowait()
-                    ptu_service._command_broadcast_queue.put_nowait(
-                        cmd_bytes.decode("ascii")
-                    )
+                    ptu_service._command_broadcast_queue.put_nowait(cmd_bytes.decode("ascii"))
                 except Exception:
                     pass
 
@@ -272,12 +260,11 @@ def _ptu_control_loop() -> None:
                 else:
                     error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
                     if error_px >= PTU_DEADBAND_PX:
-                        if abs(last_vx) > 1e-6 or abs(last_vy) > 1e-6:
-                            vx = last_vx * 0.85
-                            vy = last_vy * 0.85
-                        else:
-                            vx = smooth_err_x * last_deg_per_px * PAN_KP * 0.5
-                            vy = smooth_err_y * last_deg_per_px * TILT_KP * 0.5
+                        decay = 0.85
+                        smooth_err_x *= decay
+                        smooth_err_y *= decay
+                        vx = smooth_err_x * last_deg_per_px * PAN_KP * 0.5
+                        vy = smooth_err_y * last_deg_per_px * TILT_KP * 0.5
                         max_v = max(abs(vx), abs(vy), 1e-6)
                         scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
                         a1 = int(round(vx * scale))
@@ -287,9 +274,7 @@ def _ptu_control_loop() -> None:
                         if PTU_INVERT_TILT:
                             a2 = -a2
                         norm_err = min(error_px / (last_width / 4.0), 1.0)
-                        speed = int(
-                            PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED)
-                        )
+                        speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
                         _send_h60(a1, a2, speed)
                     else:
                         _stop_ptu()
@@ -300,7 +285,6 @@ def _ptu_control_loop() -> None:
 
             # ── Stale prediction: coast or stop ──────────────────────────────
             pred_age = time.time() - pred.get("timestamp", time.time())
-            measured_latency = 0.9 * measured_latency + 0.1 * pred_age
             if pred_age > PREDICTION_MAX_AGE_SEC:
                 coast_cycles += 1
                 if coast_cycles > PTU_COAST_CYCLES:
@@ -346,23 +330,20 @@ def _ptu_control_loop() -> None:
 
             out_x = pid_pan.compute(
                 smooth_err_x * deg_per_px,
+                raw_err_x * deg_per_px,
                 enable_integral=enable_int,
             )
             out_y = pid_tilt.compute(
                 smooth_err_y * deg_per_px,
+                raw_err_y * deg_per_px,
                 enable_integral=enable_int,
             )
 
-            vx_kalman = pred.get("vx", 0.0)
-            vy_kalman = pred.get("vy", 0.0)
-            adaptive_lead = measured_latency + PREDICTION_LEAD_SEC
-            ff_vx = vx_kalman * deg_per_px * PTU_GAIN_VX * adaptive_lead * 20.0
-            ff_vy = vy_kalman * deg_per_px * PTU_GAIN_VY * adaptive_lead * 20.0
+            ff_vx = pred.get("vx", 0.0) * deg_per_px * PTU_GAIN_VX
+            ff_vy = pred.get("vy", 0.0) * deg_per_px * PTU_GAIN_VY
 
             vx = out_x + ff_vx
             vy = out_y - ff_vy
-            last_vx = vx
-            last_vy = vy
 
             max_v = max(abs(vx), abs(vy), 1e-6)
             scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
@@ -382,22 +363,13 @@ def _ptu_control_loop() -> None:
             logger.debug(
                 "[PID-H60] err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "
                 "pid=(%.2f,%.2f) ff=(%.2f,%.2f) int=(%.3f,%.3f) "
-                "vec=(%d,%d) speed=%d age=%.3fs lat=%.3f",
-                raw_err_x,
-                raw_err_y,
-                smooth_err_x,
-                smooth_err_y,
-                out_x,
-                out_y,
-                ff_vx,
-                ff_vy,
-                pid_pan.integral,
-                pid_tilt.integral,
-                a1,
-                a2,
-                speed,
-                pred_age,
-                measured_latency,
+                "vec=(%d,%d) speed=%d age=%.3fs",
+                raw_err_x, raw_err_y,
+                smooth_err_x, smooth_err_y,
+                out_x, out_y,
+                ff_vx, ff_vy,
+                pid_pan.integral, pid_tilt.integral,
+                a1, a2, speed, pred_age,
             )
 
             elapsed = time.monotonic() - loop_start
@@ -417,7 +389,6 @@ def get_current_frame_for_stream() -> Optional[cv2.Mat]:
 
 def _get_last_prediction_from_pipeline() -> Optional[Dict[str, float]]:
     from app.api.routes.tracking import get_last_prediction
-
     return get_last_prediction()
 
 
@@ -427,12 +398,8 @@ def start_pipeline() -> None:
         logger.warning("Pipeline already running")
         return
     _pipeline_stop.clear()
-    _capture_thread = threading.Thread(
-        target=_capture_loop, daemon=True, name="capture"
-    )
-    _detection_thread = threading.Thread(
-        target=_detection_loop, daemon=True, name="detection"
-    )
+    _capture_thread = threading.Thread(target=_capture_loop, daemon=True, name="capture")
+    _detection_thread = threading.Thread(target=_detection_loop, daemon=True, name="detection")
     _ptu_thread = threading.Thread(target=_ptu_control_loop, daemon=True, name="ptu")
     _capture_thread.start()
     _detection_thread.start()
