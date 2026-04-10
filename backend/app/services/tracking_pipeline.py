@@ -373,6 +373,27 @@ def _ptu_control_loop() -> None:
 
             _send_h60(a1, a2, speed)
 
+            current_pan, current_tilt = ptu_service.get_position()
+            vx_kal = pred.get("vx", 0.0)
+            vy_kal = pred.get("vy", 0.0)
+            logger.info(
+                "[DEBUG] target=(%.1f,%.1f) aim=(%.1f,%.1f) ptu=(%.2f,%.2f)deg "
+                "vel=(%.1f,%.1f)px/s err=(%.1f,%.1f)px cmd=(%d,%d) spd=%d",
+                pred_x,
+                pred_y,
+                aim_x,
+                aim_y,
+                current_pan,
+                current_tilt,
+                vx_kal,
+                vy_kal,
+                raw_err_x,
+                raw_err_y,
+                a1,
+                a2,
+                speed,
+            )
+
             logger.debug(
                 "[PID-H60] err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "
                 "pid=(%.2f,%.2f) ff=(%.2f,%.2f) int=(%.3f,%.3f) "
