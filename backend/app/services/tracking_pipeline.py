@@ -8,7 +8,6 @@ Asynchronous tracking pipeline with three parallel threads:
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from typing import Any, Dict, Optional
@@ -17,28 +16,6 @@ import cv2
 from app.services.camera import _create_capture, _release_capture
 
 logger = logging.getLogger(__name__)
-
-_pid_log_file = os.path.join(
-    os.path.dirname(__file__), "..", "..", "logs", "pid_performance.log"
-)
-_pid_log_file = os.path.normpath(_pid_log_file)
-_pid_logger: Optional[logging.Logger] = None
-
-
-def _get_pid_logger() -> logging.Logger:
-    global _pid_logger
-    if _pid_logger is None:
-        os.makedirs(os.path.dirname(_pid_log_file), exist_ok=True)
-        _pid_logger = logging.getLogger("pid_perf")
-        _pid_logger.setLevel(logging.INFO)
-        _pid_logger.propagate = False
-        handler = logging.FileHandler(_pid_log_file)
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S.%f")[:-4]
-        )
-        _pid_logger.addHandler(handler)
-    return _pid_logger
-
 
 # --- GLOBAL SHARED STATE ---
 _frame_lock = threading.Lock()
@@ -183,9 +160,6 @@ class _PIDAxis:
         self.integral: float = 0.0
         self.prev_measurement: float = 0.0
         self._initialised: bool = False
-        self.p_term: float = 0.0
-        self.i_term: float = 0.0
-        self.d_term: float = 0.0
 
     def reset(self) -> None:
         self.integral = 0.0
@@ -195,23 +169,23 @@ class _PIDAxis:
     def compute(
         self, error: float, measurement: float, enable_integral: bool = True
     ) -> float:
-        self.p_term = self.kp * error
+        p_term = self.kp * error
 
         if enable_integral:
             self.integral += error * self.dt
             self.integral = max(
                 -self.integral_clamp, min(self.integral_clamp, self.integral)
             )
-        self.i_term = self.ki * self.integral
+        i_term = self.ki * self.integral
 
         if not self._initialised:
             self.prev_measurement = measurement
             self._initialised = True
         d_meas = (measurement - self.prev_measurement) / self.dt
         self.prev_measurement = measurement
-        self.d_term = -self.kd * d_meas
+        d_term = -self.kd * d_meas
 
-        return self.p_term + self.i_term + self.d_term
+        return p_term + i_term + d_term
 
 
 # ---------------------------------------------------------------------------
@@ -403,45 +377,21 @@ def _ptu_control_loop() -> None:
             vx_kal = pred.get("vx", 0.0)
             vy_kal = pred.get("vy", 0.0)
             logger.info(
-                "[PID-PERF] err=(%+.1f,%+.1f)px | "
-                "PAN: P=%+.3f I=%+.3f D=%+.3f (out=%+.2f) | "
-                "TILT: P=%+.3f I=%+.3f D=%+.3f (out=%+.2f) | "
-                "cmd=(%d,%d) spd=%d ptu=(%.2f,%.2f)",
+                "[DEBUG] target=(%.1f,%.1f) aim=(%.1f,%.1f) ptu=(%.2f,%.2f)deg "
+                "vel=(%.1f,%.1f)px/s err=(%.1f,%.1f)px cmd=(%d,%d) spd=%d",
+                pred_x,
+                pred_y,
+                aim_x,
+                aim_y,
+                current_pan,
+                current_tilt,
+                vx_kal,
+                vy_kal,
                 raw_err_x,
                 raw_err_y,
-                pid_pan.p_term,
-                pid_pan.i_term,
-                pid_pan.d_term,
-                out_x,
-                pid_tilt.p_term,
-                pid_tilt.i_term,
-                pid_tilt.d_term,
-                out_y,
                 a1,
                 a2,
                 speed,
-                current_pan,
-                current_tilt,
-            )
-            _get_pid_logger().info(
-                "err=(%+.1f,%+.1f) | PAN: P=%+.4f I=%+.4f D=%+.4f tot=%+.3f | "
-                "TILT: P=%+.4f I=%+.4f D=%+.4f tot=%+.3f | "
-                "cmd=(%d,%d) spd=%d ptu=(%.3f,%.3f)",
-                raw_err_x,
-                raw_err_y,
-                pid_pan.p_term,
-                pid_pan.i_term,
-                pid_pan.d_term,
-                out_x,
-                pid_tilt.p_term,
-                pid_tilt.i_term,
-                pid_tilt.d_term,
-                out_y,
-                a1,
-                a2,
-                speed,
-                current_pan,
-                current_tilt,
             )
 
             logger.debug(
