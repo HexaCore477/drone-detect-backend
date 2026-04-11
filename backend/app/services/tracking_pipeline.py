@@ -61,10 +61,11 @@ INTEGRAL_ENABLE_THRESHOLD_PX = 5
 
 PTU_MAX_SPEED = 10000
 PTU_MIN_SPEED = 1000
+PTU_MIN_DRIVE = 15  # Minimum motor output to overcome stiction
 
 PTU_LOOP_SEC = 0.015  # ~67 Hz
 
-PTU_DEADBAND_PX = 10
+PTU_DEADBAND_PX = 5
 
 PTU_ERROR_EMA_ALPHA = 0.85
 
@@ -352,8 +353,20 @@ def _ptu_control_loop() -> None:
                 enable_integral=enable_int,
             )
 
-            ff_vx = pred.get("vx", 0.0) * deg_per_px * PTU_GAIN_VX
-            ff_vy = pred.get("vy", 0.0) * deg_per_px * PTU_GAIN_VY
+            ff_vx = (
+                pred.get("vx", 0.0)
+                * deg_per_px
+                * PTU_GAIN_VX
+                * PREDICTION_LEAD_SEC
+                * 10.0
+            )
+            ff_vy = (
+                pred.get("vy", 0.0)
+                * deg_per_px
+                * PTU_GAIN_VY
+                * PREDICTION_LEAD_SEC
+                * 10.0
+            )
 
             vx = out_x + ff_vx
             vy = out_y - ff_vy
@@ -367,6 +380,11 @@ def _ptu_control_loop() -> None:
                 a1 = -a1
             if PTU_INVERT_TILT:
                 a2 = -a2
+
+            if abs(a1) < PTU_MIN_DRIVE and abs(raw_err_x) > 1:
+                a1 = PTU_MIN_DRIVE if a1 >= 0 else -PTU_MIN_DRIVE
+            if abs(a2) < PTU_MIN_DRIVE and abs(raw_err_y) > 1:
+                a2 = PTU_MIN_DRIVE if a2 >= 0 else -PTU_MIN_DRIVE
 
             norm_err = min(error_px / (width / 4.0), 1.0)
             speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
