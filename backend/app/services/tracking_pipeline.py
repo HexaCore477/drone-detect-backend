@@ -212,6 +212,14 @@ def _ptu_control_loop() -> None:
     last_height: float = 720.0
     last_deg_per_px: float = PTU_HFOV_DEG / 1280.0
 
+    last_ptu_pan: float = 0.0
+    last_ptu_tilt: float = 0.0
+    last_ptu_time: float = time.monotonic()
+    ptu_vel_pan: float = 0.0
+    ptu_vel_tilt: float = 0.0
+    prev_err_sign_x: int = 0
+    prev_err_sign_y: int = 0
+
     def _stop_ptu() -> None:
         nonlocal was_stopped
         if not was_stopped:
@@ -219,12 +227,23 @@ def _ptu_control_loop() -> None:
             was_stopped = True
 
     def _reset_all() -> None:
-        nonlocal smooth_err_x, smooth_err_y, coast_cycles
+        nonlocal \
+            smooth_err_x, \
+            smooth_err_y, \
+            coast_cycles, \
+            ptu_vel_pan, \
+            ptu_vel_tilt, \
+            prev_err_sign_x, \
+            prev_err_sign_y
         pid_pan.reset()
         pid_tilt.reset()
         smooth_err_x = 0.0
         smooth_err_y = 0.0
         coast_cycles = 0
+        ptu_vel_pan = 0.0
+        ptu_vel_tilt = 0.0
+        prev_err_sign_x = 0
+        prev_err_sign_y = 0
 
     def _send_h60(a1: int, a2: int, speed: int) -> None:
         nonlocal was_stopped
@@ -371,6 +390,38 @@ def _ptu_control_loop() -> None:
             vx = out_x + ff_vx
             vy = out_y - ff_vy
 
+            current_pan, current_tilt = ptu_service.get_position()
+            now = time.monotonic()
+            dt_ptu = now - last_ptu_time
+            if dt_ptu > 0:
+                raw_ptu_vel_pan = (current_pan - last_ptu_pan) / dt_ptu
+                raw_ptu_vel_tilt = (current_tilt - last_ptu_tilt) / dt_ptu
+                ptu_vel_pan = 0.9 * ptu_vel_pan + 0.1 * raw_ptu_vel_pan
+                ptu_vel_tilt = 0.9 * ptu_vel_tilt + 0.1 * raw_ptu_vel_tilt
+            last_ptu_pan = current_pan
+            last_ptu_tilt = current_tilt
+            last_ptu_time = now
+
+            curr_err_sign_x = 1 if raw_err_x > 0 else -1 if raw_err_x < 0 else 0
+            curr_err_sign_y = 1 if raw_err_y > 0 else -1 if raw_err_y < 0 else 0
+            if (
+                prev_err_sign_x != 0
+                and curr_err_sign_x != 0
+                and curr_err_sign_x != prev_err_sign_x
+            ):
+                ptu_vel_pan = 0.0
+            if (
+                prev_err_sign_y != 0
+                and curr_err_sign_y != 0
+                and curr_err_sign_y != prev_err_sign_y
+            ):
+                ptu_vel_tilt = 0.0
+            prev_err_sign_x = curr_err_sign_x
+            prev_err_sign_y = curr_err_sign_y
+
+            vx += ptu_vel_pan * PTU_MAX_VECTOR * 0.15
+            vy += ptu_vel_tilt * PTU_MAX_VECTOR * 0.15
+
             max_v = max(abs(vx), abs(vy), 1e-6)
             scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
             a1 = int(round(vx * scale))
@@ -390,8 +441,6 @@ def _ptu_control_loop() -> None:
             speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
 
             _send_h60(a1, a2, speed)
-
-            current_pan, current_tilt = ptu_service.get_position()
             vx_kal = pred.get("vx", 0.0)
             vy_kal = pred.get("vy", 0.0)
             logger.info(
