@@ -43,13 +43,13 @@ LASER_OFFSET_Y = 40
 
 PTU_HFOV_DEG = 60.0
 
-PAN_KP = 2.50
-PAN_KI = 0.30
-PAN_KD = 0.45
+PAN_KP = 2.10
+PAN_KI = 0.0
+PAN_KD = 0.15
 
-TILT_KP = 2.20
-TILT_KI = 0.36
-TILT_KD = 0.38
+TILT_KP = 1.00
+TILT_KI = 0.0
+TILT_KD = 0.18
 
 PTU_GAIN_VX = 1.0
 PTU_GAIN_VY = 0.8
@@ -64,7 +64,7 @@ PTU_MIN_SPEED = 1000
 
 PTU_LOOP_SEC = 0.015  # ~67 Hz
 
-PTU_DEADBAND_PX = 5
+PTU_DEADBAND_PX = 10
 
 PTU_ERROR_EMA_ALPHA = 0.85
 
@@ -74,7 +74,7 @@ PREDICTION_LEAD_SEC = 0.15
 
 PREDICTION_MAX_AGE_SEC = 0.05
 
-PTU_COAST_CYCLES = 3
+PTU_COAST_CYCLES = 6
 
 
 # ---------------------------------------------------------------------------
