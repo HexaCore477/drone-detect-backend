@@ -8,11 +8,13 @@ Asynchronous tracking pipeline with three parallel threads:
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from typing import Any, Dict, Optional
 
 import cv2
+from app.services import logger as app_logger
 from app.services.camera import _create_capture, _release_capture
 
 logger = logging.getLogger(__name__)
@@ -45,37 +47,42 @@ PTU_HFOV_DEG = 60.0
 
 PAN_KP = 2.10
 PAN_KI = 0.0
-PAN_KD = 0.15
+PAN_KD = 0.12
 
 TILT_KP = 1.00
 TILT_KI = 0.0
-TILT_KD = 0.18
-
-PTU_GAIN_VX = 1.0
+TILT_KD = 0.10
+PTU_GAIN_VX = 1.1
 PTU_GAIN_VY = 0.8
 
 PAN_INTEGRAL_CLAMP = 35.0
 TILT_INTEGRAL_CLAMP = 32.0
 
-INTEGRAL_ENABLE_THRESHOLD_PX = 5
-
-PTU_MAX_SPEED = 10000
-PTU_MIN_SPEED = 1000
-PTU_MIN_DRIVE = 15  # Minimum motor output to overcome stiction
-
-PTU_LOOP_SEC = 0.015  # ~67 Hz
-
-PTU_DEADBAND_PX = 5
-
-PTU_ERROR_EMA_ALPHA = 0.85
+INTEGRAL_ENABLE_THRESHOLD_PX = 8
 
 PTU_MAX_VECTOR = 100
+PTU_MIN_DRIVE = 15
 
-PREDICTION_LEAD_SEC = 0.15
+PTU_LOOP_SEC = 0.015
 
+PTU_DEADBAND_PX = 5
+PTU_VEL_DEADBAND = 8
+
+PTU_ERROR_EMA_ALPHA = 0.75
+
+PREDICTION_LEAD_SEC = 0.35
 PREDICTION_MAX_AGE_SEC = 0.05
+PTU_COAST_CYCLES = 10
 
-PTU_COAST_CYCLES = 6
+# ---------------------------------------------------------------------------
+# Speed model constants
+# ---------------------------------------------------------------------------
+PTU_MIN_SPEED = 1000
+PTU_MAX_SPEED = 10000
+SPEED_VEL_MAX_CONTRIBUTION = 6000
+SPEED_ERR_MAX_CONTRIBUTION = 3000
+DRONE_MAX_VEL_PX_S = 400.0
+DRONE_STOP_VEL_THRESHOLD = 15.0
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +227,9 @@ def _ptu_control_loop() -> None:
     prev_err_sign_x: int = 0
     prev_err_sign_y: int = 0
 
+    smooth_drone_speed: float = 0.0
+    DRONE_SPEED_ALPHA = 0.30
+
     def _stop_ptu() -> None:
         nonlocal was_stopped
         if not was_stopped:
@@ -234,7 +244,8 @@ def _ptu_control_loop() -> None:
             ptu_vel_pan, \
             ptu_vel_tilt, \
             prev_err_sign_x, \
-            prev_err_sign_y
+            prev_err_sign_y, \
+            smooth_drone_speed
         pid_pan.reset()
         pid_tilt.reset()
         smooth_err_x = 0.0
@@ -244,13 +255,13 @@ def _ptu_control_loop() -> None:
         ptu_vel_tilt = 0.0
         prev_err_sign_x = 0
         prev_err_sign_y = 0
+        smooth_drone_speed = 0.0
 
     def _send_h60(a1: int, a2: int, speed: int) -> None:
         nonlocal was_stopped
         cmd_bytes = f"H60,{a1},{a2},{speed}E".encode("ascii")
         if ptu_service.write_raw(cmd_bytes):
             was_stopped = False
-            # Broadcast for waterfall log (best-effort)
             try:
                 import queue as _q
 
@@ -279,7 +290,6 @@ def _ptu_control_loop() -> None:
 
             pred = _get_last_prediction_from_pipeline()
 
-            # ── No prediction: coast or stop ─────────────────────────────────
             if pred is None:
                 coast_cycles += 1
                 if coast_cycles > PTU_COAST_CYCLES:
@@ -288,6 +298,7 @@ def _ptu_control_loop() -> None:
                     pid_tilt.integral *= 0.90
                     smooth_err_x *= 0.9
                     smooth_err_y *= 0.9
+                    smooth_drone_speed *= 0.9
                 else:
                     error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
                     if error_px >= PTU_DEADBAND_PX:
@@ -316,7 +327,6 @@ def _ptu_control_loop() -> None:
                 time.sleep(max(0, dt - elapsed))
                 continue
 
-            # ── Stale prediction: coast or stop ──────────────────────────────
             pred_age = time.time() - pred.get("timestamp", time.time())
             if pred_age > PREDICTION_MAX_AGE_SEC:
                 coast_cycles += 1
@@ -328,13 +338,14 @@ def _ptu_control_loop() -> None:
                 time.sleep(max(0, dt - elapsed))
                 continue
 
-            # ── Valid prediction ──────────────────────────────────────────────
             coast_cycles = 0
 
             pred_x = pred["x"]
             pred_y = pred["y"]
             width = pred["width"]
             height = pred["height"]
+            vx_kal = pred.get("vx", 0.0)
+            vy_kal = pred.get("vy", 0.0)
 
             last_width = width
             last_height = height
@@ -350,12 +361,30 @@ def _ptu_control_loop() -> None:
 
             error_px = (smooth_err_x**2 + smooth_err_y**2) ** 0.5
 
-            if error_px < PTU_DEADBAND_PX:
-                _stop_ptu()
-                elapsed = time.monotonic() - loop_start
-                time.sleep(max(0, dt - elapsed))
-                continue
+            drone_speed_raw = math.hypot(vx_kal, vy_kal)
+            smooth_drone_speed = (
+                DRONE_SPEED_ALPHA * drone_speed_raw
+                + (1.0 - DRONE_SPEED_ALPHA) * smooth_drone_speed
+            )
 
+vel_sign_x = 1 if vx_kal > 0 else -1 if vx_kal < 0 else 0
+            vel_sign_y = 1 if vy_kal > 0 else -1 if vy_kal < 0 else 0
+            err_sign_x = 1 if raw_err_x > 0 else -1 if raw_err_x < 0 else 0
+            err_sign_y = 1 if raw_err_y > 0 else -1 if raw_err_y < 0 else 0
+            reversed_x = (vel_sign_x != 0 and err_sign_x != 0 and vel_sign_x == err_sign_x)
+            reversed_y = (vel_sign_y != 0 and err_sign_y != 0 and vel_sign_y == err_sign_y)
+            drone_stopped = smooth_drone_speed < DRONE_STOP_VEL_THRESHOLD
+
+            if drone_stopped:
+                speed_base = PTU_MIN_SPEED
+            else:
+                vel_ratio = min(smooth_drone_speed / DRONE_MAX_VEL_PX_S, 1.0)
+                speed_base = int(PTU_MIN_SPEED + vel_ratio * SPEED_VEL_MAX_CONTRIBUTION)
+
+            norm_err = min(error_px / (width / 4.0), 1.0)
+            speed_correction = int(norm_err * SPEED_ERR_MAX_CONTRIBUTION)
+
+            speed = min(speed_base + speed_correction, PTU_MAX_SPEED)
             deg_per_px = PTU_HFOV_DEG / max(width, 1.0)
             last_deg_per_px = deg_per_px
 
@@ -372,24 +401,11 @@ def _ptu_control_loop() -> None:
                 enable_integral=enable_int,
             )
 
-            ff_vx = (
-                pred.get("vx", 0.0)
-                * deg_per_px
-                * PTU_GAIN_VX
-                * PREDICTION_LEAD_SEC
-                * 10.0
-            )
-            ff_vy = (
-                pred.get("vy", 0.0)
-                * deg_per_px
-                * PTU_GAIN_VY
-                * PREDICTION_LEAD_SEC
-                * 10.0
-            )
+            ff_vx = vx_kal * deg_per_px * PTU_GAIN_VX * PREDICTION_LEAD_SEC * 10.0
+            ff_vy = vy_kal * deg_per_px * PTU_GAIN_VY * PREDICTION_LEAD_SEC * 10.0
 
             vx = out_x + ff_vx
             vy = out_y - ff_vy
-
             current_pan, current_tilt = ptu_service.get_position()
             now = time.monotonic()
             dt_ptu = now - last_ptu_time
@@ -402,6 +418,7 @@ def _ptu_control_loop() -> None:
             last_ptu_tilt = current_tilt
             last_ptu_time = now
 
+            # Sign-change damping
             curr_err_sign_x = 1 if raw_err_x > 0 else -1 if raw_err_x < 0 else 0
             curr_err_sign_y = 1 if raw_err_y > 0 else -1 if raw_err_y < 0 else 0
             if (
@@ -421,7 +438,6 @@ def _ptu_control_loop() -> None:
 
             vx += ptu_vel_pan * PTU_MAX_VECTOR * 0.15
             vy += ptu_vel_tilt * PTU_MAX_VECTOR * 0.15
-
             max_v = max(abs(vx), abs(vy), 1e-6)
             scale = min(PTU_MAX_VECTOR / max_v, PTU_MAX_VECTOR)
             a1 = int(round(vx * scale))
@@ -437,15 +453,23 @@ def _ptu_control_loop() -> None:
             if abs(a2) < PTU_MIN_DRIVE and abs(raw_err_y) > 1:
                 a2 = PTU_MIN_DRIVE if a2 >= 0 else -PTU_MIN_DRIVE
 
-            norm_err = min(error_px / (width / 4.0), 1.0)
-            speed = int(PTU_MIN_SPEED + norm_err * (PTU_MAX_SPEED - PTU_MIN_SPEED))
+            if abs(a1) < PTU_VEL_DEADBAND and abs(a2) < PTU_VEL_DEADBAND:
+                _stop_ptu()
+            else:
+                _send_h60(a1, a2, speed)
+                app_logger.log_tracking_error(
+                    smooth_err_x,
+                    smooth_err_y,
+                    error_px,
+                    vx,
+                    vy,
+                    speed,
+                )
 
-            _send_h60(a1, a2, speed)
-            vx_kal = pred.get("vx", 0.0)
-            vy_kal = pred.get("vy", 0.0)
             logger.info(
                 "[DEBUG] target=(%.1f,%.1f) aim=(%.1f,%.1f) ptu=(%.2f,%.2f)deg "
-                "vel=(%.1f,%.1f)px/s err=(%.1f,%.1f)px cmd=(%d,%d) spd=%d",
+                "vel=(%.1f,%.1f)px/s drone_spd=%.1f(smooth=%.1f) stopped=%s "
+                "spd_base=%d spd_corr=%d spd=%d err=(%.1f,%.1f)px cmd=(%d,%d)",
                 pred_x,
                 pred_y,
                 aim_x,
@@ -454,11 +478,16 @@ def _ptu_control_loop() -> None:
                 current_tilt,
                 vx_kal,
                 vy_kal,
+                drone_speed_raw,
+                smooth_drone_speed,
+                drone_stopped,
+                speed_base,
+                speed_correction,
+                speed,
                 raw_err_x,
                 raw_err_y,
                 a1,
                 a2,
-                speed,
             )
 
             logger.debug(
