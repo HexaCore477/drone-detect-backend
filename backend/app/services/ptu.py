@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:  # pragma: no cover
     import serial  # type: ignore
 
+from app.services import logger as ptu_logger
+
 logger = logging.getLogger(__name__)
 
 PULSE_TO_DEG = 0.0009375
@@ -215,10 +217,18 @@ def _serial_worker() -> None:
                 if _serial is not None and _serial.is_open:
                     if cmd[0] == "move_absolute":
                         _, pan_deg, tilt_deg, speed = cmd
+                        ptu_logger.log_target_state(pan_deg, tilt_deg, speed)
                         az_pulse = _degrees_to_pulse(pan_deg)
                         pt_pulse = _degrees_to_pulse(tilt_deg)
                         payload = f"H51,{az_pulse},{pt_pulse},{speed}E".encode("ascii")
                         _send_and_flush(payload)
+                        ptu_logger.log_ptu_reaction(
+                            "move_absolute",
+                            payload.decode("ascii"),
+                            pan_deg,
+                            tilt_deg,
+                            speed,
+                        )
                         try:
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         except queue.Full:
@@ -227,10 +237,18 @@ def _serial_worker() -> None:
 
                     elif cmd[0] == "move_relative":
                         _, pan_delta, tilt_delta, speed = cmd
+                        ptu_logger.log_target_state(pan_delta, tilt_delta, speed)
                         d_az = _degrees_to_pulse(pan_delta)
                         d_pt = _degrees_to_pulse(tilt_delta)
                         payload = f"H52,{d_az},{d_pt},{speed}E".encode("ascii")
                         _send_and_flush(payload)
+                        ptu_logger.log_ptu_reaction(
+                            "move_relative",
+                            payload.decode("ascii"),
+                            pan_delta,
+                            tilt_delta,
+                            speed,
+                        )
                         try:
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
                         except queue.Full:
@@ -297,6 +315,9 @@ def _serial_worker() -> None:
                         except queue.Full:
                             _command_broadcast_queue.get_nowait()
                             _command_broadcast_queue.put_nowait(payload.decode("ascii"))
+                        ptu_logger.log_direction(
+                            direction_name, speed, payload.decode("ascii")
+                        )
                         logger.debug(
                             "PTU direction sent: %s (%r)", direction_name, payload
                         )
@@ -321,6 +342,7 @@ def _serial_worker() -> None:
 
             except Exception as e:
                 logger.error("PTU worker command failed: %s", e)
+                ptu_logger.log_error("worker_command", e)
                 err_str = str(e)
                 _is_fatal = (
                     isinstance(e, PermissionError)
@@ -345,6 +367,7 @@ def _serial_worker() -> None:
             continue
         except Exception as e:
             logger.error("PTU worker error: %s", e)
+            ptu_logger.log_error("worker", e)
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +414,7 @@ def _drop_old_position_queries() -> None:
         pass
     for item in kept:
         _command_queue.put(item)
+
 
 def write_raw(data: bytes) -> bool:
     """
@@ -491,6 +515,7 @@ def query_position() -> tuple[bool, float, float, Optional[int], Optional[int]]:
         pan, tilt, az_pulse, pt_pulse = result_queue.get(timeout=2.0)
         _current_pan = pan
         _current_tilt = tilt
+        ptu_logger.log_position_query(pan, tilt, az_pulse, pt_pulse)
         return True, pan, tilt, az_pulse, pt_pulse
     except queue.Empty:
         logger.warning("PTU query_position timeout")
@@ -511,6 +536,7 @@ def read_resolution() -> tuple[bool, float]:
     try:
         res = result_queue.get(timeout=3.0)
         _resolution = res
+        ptu_logger.log_resolution(res)
         return True, res
     except queue.Empty:
         logger.warning("PTU read_resolution timeout")
@@ -580,21 +606,25 @@ def connect(port: str, baud: int | None = None) -> tuple[bool, str]:
             logger.info(
                 "PTU connected: %s @ %d baud (worker thread started)", port, baud
             )
+            ptu_logger.log_connection(port, baud, True)
             return True, "OK"
         except ImportError as e:
             logger.error("PTU connect failed (pyserial not installed): %s", e)
+            ptu_logger.log_connection(port, baud, False)
             _serial = None
             _connected_port = None
             _connected_baud = None
             return False, "pyserial not installed"
         except serial.SerialException as e:
             logger.error("PTU connect failed: %s", e)
+            ptu_logger.log_connection(port, baud, False)
             _serial = None
             _connected_port = None
             _connected_baud = None
             return False, str(e)
         except Exception as e:
             logger.error("PTU connect failed: %s", e)
+            ptu_logger.log_connection(port, baud, False)
             _serial = None
             _connected_port = None
             _connected_baud = None
@@ -627,10 +657,13 @@ def disconnect() -> tuple[bool, str]:
     """Disconnect from PTU."""
     with _serial_lock:
         try:
+            port = _connected_port
             _disconnect_internal()
+            ptu_logger.log_disconnection(port)
             return True, "OK"
         except Exception as e:
             logger.error("PTU disconnect failed: %s", e)
+            ptu_logger.log_error("disconnect", e)
             return False, str(e)
 
 
