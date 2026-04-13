@@ -57,34 +57,34 @@ LASER_OFFSET_Y = 40
 
 PTU_HFOV_DEG = 60.0
 
-PAN_KP  = 3.40
+PAN_KP  = 3.50
 PAN_KI  = 0.0
 PAN_KD  = 0.12 
 
 TILT_KP = 1.00
 TILT_KI = 0.0
-TILT_KD = 0.0
+TILT_KD = 0.05
                  # tilt swings at 13 px error due to jitter/dt amplification)
 
-PTU_GAIN_VX = 1.1   # was 1.0
-PTU_GAIN_VY = 0.8
+PTU_GAIN_VX = 1.0   # was 1.0
+PTU_GAIN_VY = 0.5
 
-PAN_INTEGRAL_CLAMP  = 35.0
-TILT_INTEGRAL_CLAMP = 32.0
+PAN_INTEGRAL_CLAMP  = 135.0
+TILT_INTEGRAL_CLAMP = 132.0
 
 INTEGRAL_ENABLE_THRESHOLD_PX = 8    # was 5
 
-PTU_MAX_SPEED = 11000
-PTU_MIN_SPEED = 1200
-PTU_MIN_DRIVE = 55
+PTU_MAX_SPEED = 10000
+PTU_MIN_SPEED = 1000
+PTU_MIN_DRIVE = 15
 
-PTU_LOOP_SEC = 0.015  # ~67 Hz
+PTU_LOOP_SEC = 0.060  # ~67 Hz
 
 PTU_DEADBAND_PX  = 5   # kept for coasting logic only — NOT used to stop PTU
 PTU_VEL_DEADBAND = 8   # stop only when final command vector is this small
 
 PAN_ERROR_EMA_ALPHA  = 0.75
-TILT_ERROR_EMA_ALPHA = 0.50   # heavier smoothing on noisy tilt axis
+TILT_ERROR_EMA_ALPHA = 0.70   # heavier smoothing on noisy tilt axis
 
 PTU_MAX_VECTOR = 100
 
@@ -98,7 +98,7 @@ PTU_COAST_CYCLES       = 10     # was 6
 SPEED_VEL_MAX_CONTRIBUTION = 7000   # speed units added at max drone velocity
 SPEED_ERR_MAX_CONTRIBUTION = 5000   # extra speed units for gap-closing
 DRONE_MAX_VEL_PX_S         = 350.0  # px/s considered "full speed"
-DRONE_STOP_VEL_THRESHOLD   = 8.0   # px/s below which drone is considered stopped
+DRONE_STOP_VEL_THRESHOLD   = 4.0   # px/s below which drone is considered stopped
 DRONE_SPEED_EMA_ALPHA      = 0.50   # smoothing for drone speed estimate
 
 
