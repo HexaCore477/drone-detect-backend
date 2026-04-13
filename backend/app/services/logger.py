@@ -1,6 +1,7 @@
 """Logging service - logs target states, PTU reactions, tracking errors, and errors."""
 
 import logging
+import os
 import queue
 import threading
 from typing import Any, Optional
@@ -8,6 +9,36 @@ from typing import Any, Optional
 PTU_EVENT_LOG = logging.getLogger("ptu.event")
 TRACKING_LOG = logging.getLogger("tracking")
 PTU_ERROR_LOG = logging.getLogger("ptu.error")
+
+_logs_dir = os.path.join(os.path.dirname(__file__), "..", "..", "logs")
+os.makedirs(_logs_dir, exist_ok=True)
+
+_tracking_handler = logging.FileHandler(os.path.join(_logs_dir, "tracking.log"))
+_tracking_handler.setLevel(logging.DEBUG)
+_tracking_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
+TRACKING_LOG.addHandler(_tracking_handler)
+TRACKING_LOG.setLevel(logging.DEBUG)
+TRACKING_LOG.propagate = False
+
+_ptu_handler = logging.FileHandler(os.path.join(_logs_dir, "ptu.log"))
+_ptu_handler.setLevel(logging.DEBUG)
+_ptu_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
+PTU_EVENT_LOG.addHandler(_ptu_handler)
+PTU_EVENT_LOG.setLevel(logging.DEBUG)
+PTU_EVENT_LOG.propagate = False
+
+_error_handler = logging.FileHandler(os.path.join(_logs_dir, "ptu_error.log"))
+_error_handler.setLevel(logging.ERROR)
+_error_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
+PTU_ERROR_LOG.addHandler(_error_handler)
+PTU_ERROR_LOG.setLevel(logging.ERROR)
+PTU_ERROR_LOG.propagate = False
 
 
 def log_target_state(pan: float, tilt: float, speed: Optional[int] = None) -> None:
