@@ -8,4 +8,6 @@ cd "backend"
 START runner.bat
 cd..
 
+explorer "http://localhost:8080"
+
 exit
