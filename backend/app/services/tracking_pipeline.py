@@ -18,6 +18,18 @@ from app.services.camera import _create_capture, _release_capture
 
 logger = logging.getLogger(__name__)
 
+_log_dir = os.path.join(os.path.dirname(__file__), "..", "..", "logs")
+os.makedirs(_log_dir, exist_ok=True)
+_tracking_handler = logging.FileHandler(os.path.join(_log_dir, "tracking.log"))
+_tracking_handler.setLevel(logging.DEBUG)
+_tracking_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
+_tracking_logger = logging.getLogger("tracking_pipeline")
+_tracking_logger.addHandler(_tracking_handler)
+_tracking_logger.setLevel(logging.DEBUG)
+_tracking_logger.propagate = False
+
 # --- GLOBAL SHARED STATE ---
 _frame_lock = threading.Lock()
 _current_frame: Optional[cv2.Mat] = None
