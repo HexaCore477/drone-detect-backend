@@ -19,7 +19,7 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 # Tracking constants
 # ---------------------------------------------------------------------------
 MAX_TRACK_AGE_SEC   = 2.0
-PREDICTION_LEAD_SEC = 0.35   # updated: matches pipeline constant
+PREDICTION_LEAD_SEC = 0.25  # updated: matches pipeline constant
 WARMUP_FRAMES       = 4
 SEND_INTERVAL_SEC   = 0.05
 

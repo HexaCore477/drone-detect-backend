@@ -385,13 +385,14 @@ def _enqueue(cmd: tuple) -> bool:
 
 
 def _drop_old_move_commands() -> None:
-    """Drain move commands from queue, keep non-move items (query_position, _STOP)."""
+    """Drain move/direction commands from queue.    """
     kept: list = []
     try:
         while True:
             item = _command_queue.get_nowait()
             if item is _STOP or (
-                isinstance(item, tuple) and item[0] == "query_position"
+                isinstance(item, tuple)
+                and item[0] in ("query_position", "write")
             ):
                 kept.append(item)
     except queue.Empty:

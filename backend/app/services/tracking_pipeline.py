@@ -63,42 +63,44 @@ PAN_KD  = 0.12
 
 TILT_KP = 1.00
 TILT_KI = 0.0
-TILT_KD = 0.05
+TILT_KD = 0.0
                  # tilt swings at 13 px error due to jitter/dt amplification)
 
 PTU_GAIN_VX = 1.0   # was 1.0
-PTU_GAIN_VY = 0.5
+PTU_GAIN_VY = 0.8
 
-PAN_INTEGRAL_CLAMP  = 135.0
-TILT_INTEGRAL_CLAMP = 132.0
+PAN_INTEGRAL_CLAMP  = 35.0
+TILT_INTEGRAL_CLAMP = 32.0
 
 INTEGRAL_ENABLE_THRESHOLD_PX = 8    # was 5
 
-PTU_MAX_SPEED = 10000
-PTU_MIN_SPEED = 1000
-PTU_MIN_DRIVE = 15
+PTU_MAX_SPEED = 11000
+PTU_MIN_SPEED = 1500
+PTU_MIN_DRIVE = 25
 
-PTU_LOOP_SEC = 0.060  # ~67 Hz
+PTU_LOOP_SEC = 0.015  # ~67 Hz
 
 PTU_DEADBAND_PX  = 5   # kept for coasting logic only — NOT used to stop PTU
 PTU_VEL_DEADBAND = 8   # stop only when final command vector is this small
 
 PAN_ERROR_EMA_ALPHA  = 0.75
-TILT_ERROR_EMA_ALPHA = 0.70   # heavier smoothing on noisy tilt axis
+TILT_ERROR_EMA_ALPHA = 0.50   # heavier smoothing on noisy tilt axis
 
 PTU_MAX_VECTOR = 100
 
-PREDICTION_LEAD_SEC    = 0.15   # was 0.15 — accounts for YOLO+serial+mechanical latency
+PREDICTION_LEAD_SEC    = 0.20
 PREDICTION_MAX_AGE_SEC = 0.05
-PTU_COAST_CYCLES       = 10     # was 6
+PTU_COAST_CYCLES       = 10
+PTU_STOP_COAST_FRAMES  = 8      # frames command must stay small before PTU stops (~0.12s)
 
 # ---------------------------------------------------------------------------
 # Velocity-based speed model constants
 # ---------------------------------------------------------------------------
-SPEED_VEL_MAX_CONTRIBUTION = 7000   # speed units added at max drone velocity
+SPEED_VEL_MAX_CONTRIBUTION = 7000
+SPEED_ERR_STOPPED_MAX      = 4000   # speed bonus when drone stopped but error large
 SPEED_ERR_MAX_CONTRIBUTION = 5000   # extra speed units for gap-closing
 DRONE_MAX_VEL_PX_S         = 350.0  # px/s considered "full speed"
-DRONE_STOP_VEL_THRESHOLD   = 4.0   # px/s below which drone is considered stopped
+DRONE_STOP_VEL_THRESHOLD   = 8.0
 DRONE_SPEED_EMA_ALPHA      = 0.50   # smoothing for drone speed estimate
 
 
@@ -239,6 +241,7 @@ def _ptu_control_loop() -> None:
     last_deg_per_px: float = PTU_HFOV_DEG / 1280.0
 
     smooth_drone_speed: float = 0.0
+    _coast_stop_count:  int   = 0
 
     def _stop_ptu() -> None:
         nonlocal was_stopped
@@ -247,13 +250,14 @@ def _ptu_control_loop() -> None:
             was_stopped = True
 
     def _reset_all() -> None:
-        nonlocal smooth_err_x, smooth_err_y, coast_cycles, smooth_drone_speed
+        nonlocal smooth_err_x, smooth_err_y, coast_cycles, smooth_drone_speed, _coast_stop_count
         pid_pan.reset()
         pid_tilt.reset()
         smooth_err_x       = 0.0
         smooth_err_y       = 0.0
         coast_cycles       = 0
         smooth_drone_speed = 0.0
+        _coast_stop_count  = 0
 
     def _send_h60(a1: int, a2: int, speed: int) -> None:
         nonlocal was_stopped
@@ -371,7 +375,9 @@ def _ptu_control_loop() -> None:
             # speed_correction adds extra speed to close a gap faster.
             # Both collapse naturally when drone stops and error is zero.
             if drone_stopped:
-                speed_base = PTU_MIN_SPEED
+                # Drone stopped: still scale speed by error so PTU closes the gap
+                err_ratio  = min(error_px / (width / 4.0), 1.0)
+                speed_base = int(PTU_MIN_SPEED + err_ratio * SPEED_ERR_STOPPED_MAX)
             else:
                 vel_ratio  = min(smooth_drone_speed / DRONE_MAX_VEL_PX_S, 1.0)
                 speed_base = int(PTU_MIN_SPEED + vel_ratio * SPEED_VEL_MAX_CONTRIBUTION)
@@ -418,10 +424,18 @@ def _ptu_control_loop() -> None:
             if abs(a2) < PTU_MIN_DRIVE and abs(raw_err_y) > 1:
                 a2 = PTU_MIN_DRIVE if a2 >= 0 else -PTU_MIN_DRIVE
 
-            # ── Stop only when total command vector is negligible ─────────────
-            # A moving drone keeps ff_vx/ff_vy non-zero → a1,a2 stay above
-            # PTU_VEL_DEADBAND → PTU keeps gliding even when error == 0.
-            if abs(a1) < PTU_VEL_DEADBAND and abs(a2) < PTU_VEL_DEADBAND:
+            # ── Stop decision: coast before stopping ──────────────────────
+            # Only stop after PTU_STOP_COAST_FRAMES consecutive frames of
+            # small command AND small error. Prevents a single Kalman velocity
+            # dropout halting the PTU mid-approach to a stationary drone.
+            cmd_small = (abs(a1) < PTU_VEL_DEADBAND and abs(a2) < PTU_VEL_DEADBAND)
+            err_small = (abs(raw_err_x) < PTU_DEADBAND_PX * 2
+                         and abs(raw_err_y) < PTU_DEADBAND_PX * 2)
+            if cmd_small and err_small:
+                _coast_stop_count += 1
+            else:
+                _coast_stop_count = 0
+            if _coast_stop_count >= PTU_STOP_COAST_FRAMES:
                 _stop_ptu()
             else:
                 _send_h60(a1, a2, speed)
