@@ -322,7 +322,7 @@ def _run_detection_on_frame(
         # Extract Kalman velocity (px/s) for PTU feedforward
         kf_vx, kf_vy = primary_item["track"].get_velocity()
         set_last_prediction(
-            primary_pred["x"], primary_pred["y"],
+            primary_item["cx"], primary_item["cy"],  # v8: send CURRENT pos, not predicted
             int(primary_pred["width"]), int(primary_pred["height"]),
             timestamp,
             vx=kf_vx,
