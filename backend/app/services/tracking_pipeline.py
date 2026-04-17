@@ -26,7 +26,6 @@ v11 — Returns to H60 velocity mode with sign-change lockout.
   NEW — Sign-change lockout:
     When the pan command wants to reverse direction, don't send the reversal
     immediately. Instead, hold the previous direction (decaying) for up to
-    LOCKOUT_FRAMES cycles. Only reverse if the new direction persists for
     that many frames. This prevents the D-term/EMA lag from causing a
     momentary false reversal at zero crossings, while still allowing genuine
     direction changes (when the error truly crosses and stays crossed).
@@ -81,13 +80,13 @@ LASER_OFFSET_Y = 40
 PTU_HFOV_DEG = 60.0
 
 # ── PID gains (from v9) ──────────────────────────────────────────────────
-PAN_KP  = 2.30
-PAN_KI  = 0.005
+PAN_KP  = 1.80
+PAN_KI  = 0.0
 PAN_KD  = 0.12
 
 TILT_KP = 0.90
-TILT_KI = 0.005
-TILT_KD = 0.06
+TILT_KI = 0.0
+TILT_KD = 0.0
 
 PTU_GAIN_VX = 1.0
 PTU_GAIN_VY = 0.8
@@ -97,12 +96,12 @@ TILT_INTEGRAL_CLAMP = 32.0
 INTEGRAL_ENABLE_THRESHOLD_PX = 40
 
 PTU_MAX_SPEED = 11000
-PTU_MIN_SPEED = 1500
+PTU_MIN_SPEED = 100
 
 PTU_LOOP_SEC = 0.033      # 30 Hz
 
 PTU_DEADBAND_PX  = 15
-PTU_VEL_DEADBAND = 19
+PTU_VEL_DEADBAND = 3
 
 PAN_ERROR_EMA_ALPHA  = 0.85
 TILT_ERROR_EMA_ALPHA = 0.60
@@ -110,14 +109,22 @@ TILT_ERROR_EMA_ALPHA = 0.60
 PTU_MAX_VECTOR = 100
 
 # FF (from v9 — uses raw error for attenuation)
-PREDICTION_LEAD_SEC = 0.02
-FF_GAIN_MULTIPLIER  = 0.5
-FF_ATTEN_ERROR_PX   = 120.0
-FF_MIN_GAIN         = 0.02
+# PREDICTION_LEAD_SEC = 0.02
+# FF_GAIN_MULTIPLIER  = 0.5
+# FF_ATTEN_ERROR_PX   = 120.0
+# FF_MIN_GAIN         = 0.02
+
+PREDICTION_LEAD_SEC = 0.01
+FF_GAIN_MULTIPLIER  =0.01
+FF_ATTEN_ERROR_PX   = 0.01
+FF_MIN_GAIN         = 0.01
 
 PREDICTION_MAX_AGE_SEC = 0.10
 PTU_COAST_CYCLES       = 10
 PTU_STOP_COAST_FRAMES  = 5
+HARD_STOP_PX           = 25     # hard-stop PTU when error within this (px)
+RESTART_PX             = 50     # restart only when error exceeds this (px)
+DEADBAND_MIN_FRAMES    = 4      # hold stop for at least this many frames (~270ms)
 
 SPEED_VEL_MAX_CONTRIBUTION = 7000
 SPEED_ERR_STOPPED_MAX      = 4000
@@ -139,11 +146,8 @@ SPEED_PER_CMD     = 80
 
 # ── Sign-change lockout ──────────────────────────────────────────────────
 # When pan command reverses sign, don't send the reversal immediately.
-# Hold previous direction (decaying) for up to LOCKOUT_FRAMES.
 # Only allow the reversal if it persists for that many consecutive frames
 # OR if the raw error has clearly crossed (error confirms the reversal).
-LOCKOUT_FRAMES         = 40     # ~100ms at 30Hz
-LOCKOUT_ERROR_OVERRIDE = 40    # if |raw_err_x| > this in the NEW direction, skip lockout
 
 
 # ---------------------------------------------------------------------------
@@ -229,13 +233,10 @@ class _PIDAxis:
 
 
 def _scale_axes(vx, vy):
-    S = 3.5
-    cx, cy = vx * S, vy * S
-    mx = max(abs(cx), abs(cy), 1e-9)
-    if mx > PTU_MAX_VECTOR:
-        r = PTU_MAX_VECTOR / mx
-        cx, cy = cx * r, cy * r
-    return int(round(cx)), int(round(cy))
+    S = 17.0
+    cx = max(-PTU_MAX_VECTOR, min(PTU_MAX_VECTOR, int(round(vx * S))))
+    cy = max(-PTU_MAX_VECTOR, min(PTU_MAX_VECTOR, int(round(vy * S))))
+    return cx, cy
 
 
 def _cap_speed(a1, a2, speed):
@@ -259,6 +260,8 @@ def _ptu_control_loop() -> None:
     last_deg_per_px = PTU_HFOV_DEG / 1920.0
     smooth_drone_speed = 0.0
     _coast_stop_count = 0
+    _in_deadband = False
+    _deadband_frames = 0
 
     _last_pred_key: Optional[tuple] = None
     _stale_repeat_count = 0
@@ -272,8 +275,6 @@ def _ptu_control_loop() -> None:
     _last_speed = PTU_MIN_SPEED
 
     # Sign-change lockout state
-    _last_pan_sign = 0       # +1 or -1
-    _reversal_count = 0      # how many frames the new sign has persisted
 
     def _stop_ptu():
         nonlocal was_stopped, _sent_a1, _sent_a2, _sent_spd
@@ -282,19 +283,23 @@ def _ptu_control_loop() -> None:
             ptu_logger.PTU_EVENT_LOG.info("h60_stop: cmd=H65E")
             was_stopped = True
             _sent_a1 = _sent_a2 = _sent_spd = 0
+            try:
+                from app.api.routes.tracking import set_ptu_stopped
+                set_ptu_stopped()
+            except Exception:
+                pass
 
     def _reset_all():
         nonlocal smooth_err_x, smooth_err_y, coast_cycles, smooth_drone_speed
-        nonlocal _coast_stop_count, _last_pred_key, _stale_repeat_count, _stale_speed_factor
+        nonlocal _coast_stop_count, _in_deadband, _deadband_frames, _last_pred_key, _stale_repeat_count, _stale_speed_factor
         nonlocal _prev_a1, _prev_a2, _sent_a1, _sent_a2, _sent_spd, _skip_count
-        nonlocal _last_a1, _last_a2, _last_speed, _last_pan_sign, _reversal_count
+        nonlocal _last_a1, _last_a2, _last_speed
         pid_pan.reset(); pid_tilt.reset()
         smooth_err_x = smooth_err_y = 0.0
-        coast_cycles = 0; smooth_drone_speed = 0.0; _coast_stop_count = 0
+        coast_cycles = 0; smooth_drone_speed = 0.0; _coast_stop_count = 0; _in_deadband = False; _deadband_frames = 0
         _last_pred_key = None; _stale_repeat_count = 0; _stale_speed_factor = 1.0
         _prev_a1 = _prev_a2 = 0; _sent_a1 = _sent_a2 = _sent_spd = 0; _skip_count = 0
         _last_a1 = _last_a2 = 0; _last_speed = PTU_MIN_SPEED
-        _last_pan_sign = 0; _reversal_count = 0
 
     def _send_h60(a1, a2, speed):
         nonlocal was_stopped, _sent_a1, _sent_a2, _sent_spd, _skip_count
@@ -303,6 +308,11 @@ def _ptu_control_loop() -> None:
             was_stopped = False
             _sent_a1, _sent_a2, _sent_spd = a1, a2, speed
             _skip_count = 0
+            try:
+                from app.api.routes.tracking import set_ptu_command
+                set_ptu_command(a1, a2, speed)
+            except Exception:
+                pass
             ptu_logger.PTU_EVENT_LOG.debug(
                 "h60_velocity: cmd=%s a1=%d a2=%d speed=%d",
                 cmd.decode("ascii"), a1, a2, speed)
@@ -407,15 +417,8 @@ def _ptu_control_loop() -> None:
                                   + (1.0 - DRONE_SPEED_EMA_ALPHA) * smooth_drone_speed)
             drone_stopped = smooth_drone_speed < DRONE_STOP_VEL_THRESHOLD
 
-            # Speed
-            if drone_stopped:
-                er = min(error_px / (width / 4.0), 1.0)
-                speed_base = int(PTU_MIN_SPEED + er * SPEED_ERR_STOPPED_MAX)
-            else:
-                vr = min(smooth_drone_speed / DRONE_MAX_VEL_PX_S, 1.0)
-                speed_base = int(PTU_MIN_SPEED + vr * SPEED_VEL_MAX_CONTRIBUTION)
             ne = min(error_px / (width / 4.0), 1.0)
-            speed = min(speed_base + int(ne * SPEED_ERR_MAX_CONTRIBUTION), PTU_MAX_SPEED)
+            speed = int(PTU_MIN_SPEED + ne * (PTU_MAX_SPEED - PTU_MIN_SPEED))
             speed = max(int(speed * _stale_speed_factor), PTU_MIN_SPEED)
 
             # PID
@@ -426,20 +429,19 @@ def _ptu_control_loop() -> None:
             out_x = pid_pan.compute(smooth_err_x * deg_per_px,
                                     raw_err_x * deg_per_px, enable_int)
 
-            if abs(raw_err_x) < 150:
-                out_x *= 0.6
 
             out_y = pid_tilt.compute(smooth_err_y * deg_per_px,
                                      raw_err_y * deg_per_px, enable_int)
 
-            if abs(raw_err_y) < 150:
-                out_y *= 0.5
 
             # FF with raw-error attenuation (v9)
             ff_raw = 1.0 - min(raw_error_px / FF_ATTEN_ERROR_PX, 1.0)
             ff_atten = max(FF_MIN_GAIN, ff_raw * ff_raw)
-            ff_vx = vx_kal * deg_per_px * PTU_GAIN_VX * PREDICTION_LEAD_SEC * FF_GAIN_MULTIPLIER * ff_atten
-            ff_vy = vy_kal * deg_per_px * PTU_GAIN_VY * PREDICTION_LEAD_SEC * FF_GAIN_MULTIPLIER * ff_atten
+            if drone_stopped:
+                ff_vx = ff_vy = 0.0
+            else:
+                ff_vx = vx_kal * deg_per_px * PTU_GAIN_VX * PREDICTION_LEAD_SEC * FF_GAIN_MULTIPLIER * ff_atten
+                ff_vy = vy_kal * deg_per_px * PTU_GAIN_VY * PREDICTION_LEAD_SEC * FF_GAIN_MULTIPLIER * ff_atten
 
             vx = out_x + ff_vx
             vy = out_y - ff_vy
@@ -449,62 +451,48 @@ def _ptu_control_loop() -> None:
             if PTU_INVERT_TILT: a2 = -a2
 
             # Rate limit
-            a1 = int(round(_prev_a1 + max(-CMD_RATE_LIMIT, min(CMD_RATE_LIMIT, a1 - _prev_a1))))
-            a2 = int(round(_prev_a2 + max(-CMD_RATE_LIMIT, min(CMD_RATE_LIMIT, a2 - _prev_a2))))
-
-            # ── Sign-change lockout (prevents zero-crossing reversal) ────
-            # If pan command wants to reverse, check if it's a genuine
-            # direction change or just a momentary D-term/EMA artifact.
-            new_sign = 1 if a1 > 0 else (-1 if a1 < 0 else 0)
-            if new_sign != 0 and _last_pan_sign != 0 and new_sign != _last_pan_sign:
-                # Command wants to reverse
-                _reversal_count += 1
-                # Allow reversal if:
-                # 1) raw error clearly confirms the new direction, OR
-                # 2) reversal has persisted for LOCKOUT_FRAMES
-                err_confirms = (raw_err_x > LOCKOUT_ERROR_OVERRIDE and new_sign < 0) or \
-                               (raw_err_x < -LOCKOUT_ERROR_OVERRIDE and new_sign > 0)
-                               # Note: inverted because PTU_INVERT_PAN
-                if not err_confirms and _reversal_count < LOCKOUT_FRAMES:
-                    # Suppress reversal — decay previous command instead
-                    a1 = int(round(_prev_a1 * 0.5))
-                    _tracking_logger.debug("LOCKOUT: suppressed pan reversal, holding a1=%d", a1)
-                else:
-                    # Genuine reversal — allow it
-                    _last_pan_sign = new_sign
-                    _reversal_count = 0
-            else:
-                if new_sign != 0:
-                    _last_pan_sign = new_sign
-                _reversal_count = 0
+            a1 = max(-100, min(100, a1))
+            a2 = max(-100, min(100, a2))
 
             _prev_a1, _prev_a2 = a1, a2
 
             speed = _cap_speed(a1, a2, speed)
             _last_a1, _last_a2, _last_speed = a1, a2, speed
 
-            # Stop decision
-            cmd_small = abs(a1) < PTU_VEL_DEADBAND and abs(a2) < PTU_VEL_DEADBAND
-            err_small = abs(raw_err_x) < PTU_DEADBAND_PX * 2 and abs(raw_err_y) < PTU_DEADBAND_PX * 2
-            if cmd_small and err_small and drone_stopped:
-                _coast_stop_count += 1
-            else:
-                _coast_stop_count = 0
-            if _coast_stop_count >= PTU_STOP_COAST_FRAMES:
+            # Stop decision — hysteresis deadband with minimum hold
+            # Hard-stop when error < HARD_STOP_PX. Hold stopped for at least
+            # DEADBAND_MIN_FRAMES frames, then only restart when error > RESTART_PX.
+            # The min-frame hold prevents the PTU coast from immediately releasing
+            # the deadband (PTU coasts ~25px after H65E before Kalman sees it settle).
+            error_2d = math.hypot(raw_err_x, raw_err_y)
+            if _in_deadband:
+                _deadband_frames += 1
                 _stop_ptu()
+                _coast_stop_count = 0
+                # Release deadband only after min hold AND error is large enough
+                if _deadband_frames >= DEADBAND_MIN_FRAMES and error_2d > RESTART_PX:
+                    _in_deadband = False
+                    _deadband_frames = 0
             else:
-                if _should_send(a1, a2, speed):
-                    _send_h60(a1, a2, speed)
+                if error_2d < HARD_STOP_PX:
+                    _stop_ptu()
+                    _in_deadband = True
+                    _deadband_frames = 0
+                    _coast_stop_count = 0
+                else:
+                    _coast_stop_count = 0
+                    if _should_send(a1, a2, speed):
+                        _send_h60(a1, a2, speed)
 
             _tracking_logger.info(
                 "target=(%.1f,%.1f) aim=(%.1f,%.1f) "
                 "vel=(%.1f,%.1f)px/s drone_spd=%.1f(smooth=%.1f) stopped=%s "
                 "spd=%d err=(%.1f,%.1f)px cmd=(%d,%d) "
-                "stale=%d sf=%.2f rev=%d",
+                "stale=%d sf=%.2f",
                 pred_x, pred_y, aim_x, aim_y,
                 vx_kal, vy_kal, drone_speed_raw, smooth_drone_speed, drone_stopped,
                 speed, raw_err_x, raw_err_y, a1, a2,
-                _stale_repeat_count, _stale_speed_factor, _reversal_count)
+                _stale_repeat_count, _stale_speed_factor)
 
             _tracking_logger.debug(
                 "err=(%.1f,%.1f)px smooth=(%.1f,%.1f)px "

@@ -15,6 +15,68 @@ from app.services import view_subscription
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
+import os as _os, logging as _logging
+_klog_dir = _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "logs")
+_os.makedirs(_klog_dir, exist_ok=True)
+_kh = _logging.FileHandler(_os.path.join(_klog_dir, "kalman_debug.log"))
+_kh.setFormatter(_logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
+_kalman_logger = _logging.getLogger("kalman_debug")
+_kalman_logger.addHandler(_kh)
+_kalman_logger.setLevel(_logging.DEBUG)
+_kalman_logger.propagate = False
+
+# Camera-motion compensation
+# PTU_K_DEG_S calibrated from kalman_debug.log:
+#   avg |a1|=57, speed=2454 → 4.1px/frame shift at 30fps = 3.9 deg/s
+#   K = 3.9 / ((57/100)*(2454/11000)) = 30 deg/s
+# If comp_x still drifts WITH PTU motion → increase K.
+# If comp_x drifts AGAINST PTU motion → decrease K.
+PTU_K_DEG_S  = 6.0
+_HFOV_DEG    = 60.0
+_MAX_SPEED   = 11000
+_INVERT_PAN  = True
+_INVERT_TILT = False
+
+_ptu_cmd_lock   = threading.Lock()
+_ptu_last_a1:    int  = 0
+_ptu_last_a2:    int  = 0
+_ptu_last_speed: int  = 0
+_ptu_was_moving: bool = False
+
+def set_ptu_command(a1: int, a2: int, speed: int) -> None:
+    global _ptu_last_a1, _ptu_last_a2, _ptu_last_speed, _ptu_was_moving
+    with _ptu_cmd_lock:
+        _ptu_last_a1, _ptu_last_a2, _ptu_last_speed = a1, a2, speed
+        _ptu_was_moving = True
+
+def set_ptu_stopped() -> None:
+    global _ptu_last_a1, _ptu_last_a2, _ptu_last_speed, _ptu_was_moving
+    with _ptu_cmd_lock:
+        _ptu_last_a1 = _ptu_last_a2 = _ptu_last_speed = 0
+        _ptu_was_moving = False
+
+def get_ptu_moving() -> bool:
+    with _ptu_cmd_lock:
+        return _ptu_was_moving
+
+def get_camera_motion_px(frame_w: float, dt: float) -> tuple:
+    with _ptu_cmd_lock:
+        a1, a2, spd = _ptu_last_a1, _ptu_last_a2, _ptu_last_speed
+    if spd == 0:
+        return 0.0, 0.0
+    px_per_deg = frame_w / _HFOV_DEG
+    omega_pan  = PTU_K_DEG_S * (abs(a1) / 100.0) * (spd / _MAX_SPEED)
+    omega_tilt = PTU_K_DEG_S * (abs(a2) / 100.0) * (spd / _MAX_SPEED)
+    dx = omega_pan  * px_per_deg * dt * (1 if a1 > 0 else -1)
+    dy = omega_tilt * px_per_deg * dt * (1 if a2 > 0 else -1)
+    if _INVERT_PAN:  dx = -dx
+    if _INVERT_TILT: dy = -dy
+    return dx, dy
+
+# Hysteresis deadband: prevents micro-hunting from YOLO jitter
+DEADBAND_STOP_PX    = 15
+DEADBAND_RESTART_PX = 25
+
 # ---------------------------------------------------------------------------
 # Tracking constants
 # ---------------------------------------------------------------------------
@@ -178,16 +240,37 @@ class Track:
         self.size = "medium"
         self.is_target = False
         cx, cy = det["centerX"], det["centerY"]
-        self.kalman = KalmanFilter2D(cx, cy, dt=SEND_INTERVAL_SEC)
+        self.kalman = KalmanFilter2D(cx, cy, dt=SEND_INTERVAL_SEC,
+                                     process_noise=1.0,
+                                     measurement_noise=8.0)
         self.kalman.update(cx, cy)
         self._last_measurement = (float(cx), float(cy))
         self._update_count = 1
         self._bbox = {k: det[k] for k in ("bbox_x","bbox_y","bbox_w","bbox_h")}
 
     def update(self, det: Dict, timestamp: float) -> None:
-        cx, cy = det["centerX"], det["centerY"]
-        self.kalman.predict(dt=timestamp - self.last_seen)
+        cx_raw, cy_raw = det["centerX"], det["centerY"]
+        dt_det = timestamp - self.last_seen
+        frame_w = float(det.get("frame_w", 1920))
+        dx_comp, dy_comp = get_camera_motion_px(frame_w, dt_det)
+        cx = cx_raw - dx_comp
+        cy = cy_raw - dy_comp
+        kx_pre = float(self.kalman.state[0, 0])
+        ky_pre = float(self.kalman.state[1, 0])
+        self.kalman.predict(dt=dt_det)
         self.kalman.update(cx, cy)
+        kx_post = float(self.kalman.state[0, 0])
+        ky_post = float(self.kalman.state[1, 0])
+        vx, vy = self.get_velocity()
+        _kalman_logger.debug(
+            "raw=%.1f,%.1f comp=%.1f,%.1f dx=%.1f dy=%.1f "
+            "pre=%.1f,%.1f post=%.1f,%.1f drift=%.1f,%.1f vx=%.1f vy=%.1f ptu=%s",
+            cx_raw, cy_raw, cx, cy, dx_comp, dy_comp,
+            kx_pre, ky_pre, kx_post, ky_post,
+            kx_post - cx, ky_post - cy,
+            vx, vy,
+            "M" if get_ptu_moving() else "s",
+        )
         self.last_seen = timestamp
         self._last_measurement = (float(cx), float(cy))
         self._update_count += 1
@@ -267,6 +350,9 @@ def _run_detection_on_frame(
     h, w = frame.shape[:2]
 
     raw = detect_objects(frame)
+    if raw:
+        for _d in raw:
+            _d["frame_w"] = float(w)
 
     if raw:
         unmatched, tracks = _associate(raw, tracks, timestamp)
