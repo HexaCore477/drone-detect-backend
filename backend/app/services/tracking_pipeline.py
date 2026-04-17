@@ -81,7 +81,7 @@ LASER_OFFSET_Y = 40
 PTU_HFOV_DEG = 60.0
 
 # ── PID gains (from v9) ──────────────────────────────────────────────────
-PAN_KP  = 2.50
+PAN_KP  = 2.80
 PAN_KI  = 0.005
 PAN_KD  = 0.12
 
@@ -104,15 +104,15 @@ PTU_LOOP_SEC = 0.033      # 30 Hz
 PTU_DEADBAND_PX  = 4
 PTU_VEL_DEADBAND = 9
 
-PAN_ERROR_EMA_ALPHA  = 0.85
+PAN_ERROR_EMA_ALPHA  = 0.50
 TILT_ERROR_EMA_ALPHA = 0.60
 
 PTU_MAX_VECTOR = 100
 
 # FF (from v9 — uses raw error for attenuation)
-PREDICTION_LEAD_SEC = 0.04
-FF_GAIN_MULTIPLIER  = 1.5
-FF_ATTEN_ERROR_PX   = 60.0
+PREDICTION_LEAD_SEC = 0.15
+FF_GAIN_MULTIPLIER  = 2.0
+FF_ATTEN_ERROR_PX   = 800.0
 FF_MIN_GAIN         = 0.02
 
 PREDICTION_MAX_AGE_SEC = 0.10
@@ -135,7 +135,7 @@ CMD_RATE_LIMIT    = 50
 CMD_GATE_DA       = 3
 CMD_GATE_DSPD     = 100
 CMD_GATE_MAX_SKIP = 5
-SPEED_PER_CMD     = 80
+SPEED_PER_CMD     = 250
 
 # ── Sign-change lockout ──────────────────────────────────────────────────
 # When pan command reverses sign, don't send the reversal immediately.
