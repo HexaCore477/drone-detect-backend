@@ -135,6 +135,7 @@ CMD_RATE_LIMIT    = 50
 CMD_GATE_DA       = 3
 CMD_GATE_DSPD     = 100
 CMD_GATE_MAX_SKIP = 5
+SPEED_CAP_BASE = 800
 SPEED_PER_CMD     = 250
 
 # ── Sign-change lockout ──────────────────────────────────────────────────
@@ -239,8 +240,7 @@ def _scale_axes(vx, vy):
 
 
 def _cap_speed(a1, a2, speed):
-    return min(speed, PTU_MIN_SPEED + max(abs(a1), abs(a2)) * SPEED_PER_CMD)
-
+    return min(speed, SPEED_CAP_BASE + max(abs(a1), abs(a2)) * SPEED_PER_CMD)
 
 # ---------------------------------------------------------------------------
 def _ptu_control_loop() -> None:
