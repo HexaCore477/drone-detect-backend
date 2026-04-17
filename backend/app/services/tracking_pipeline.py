@@ -81,7 +81,7 @@ LASER_OFFSET_Y = 40
 PTU_HFOV_DEG = 60.0
 
 # ── PID gains (from v9) ──────────────────────────────────────────────────
-PAN_KP  = 2.30
+PAN_KP  = 2.50
 PAN_KI  = 0.005
 PAN_KD  = 0.12
 
@@ -89,20 +89,20 @@ TILT_KP = 0.90
 TILT_KI = 0.005
 TILT_KD = 0.06
 
-PTU_GAIN_VX = 1.0
+PTU_GAIN_VX = 1.5
 PTU_GAIN_VY = 0.8
 
 PAN_INTEGRAL_CLAMP  = 35.0
 TILT_INTEGRAL_CLAMP = 32.0
-INTEGRAL_ENABLE_THRESHOLD_PX = 40
+INTEGRAL_ENABLE_THRESHOLD_PX = 20
 
 PTU_MAX_SPEED = 11000
-PTU_MIN_SPEED = 100
+PTU_MIN_SPEED = 350
 
 PTU_LOOP_SEC = 0.033      # 30 Hz
 
-PTU_DEADBAND_PX  = 6
-PTU_VEL_DEADBAND = 12
+PTU_DEADBAND_PX  = 4
+PTU_VEL_DEADBAND = 9
 
 PAN_ERROR_EMA_ALPHA  = 0.85
 TILT_ERROR_EMA_ALPHA = 0.60
@@ -112,7 +112,7 @@ PTU_MAX_VECTOR = 100
 # FF (from v9 — uses raw error for attenuation)
 PREDICTION_LEAD_SEC = 0.04
 FF_GAIN_MULTIPLIER  = 1.5
-FF_ATTEN_ERROR_PX   = 120.0
+FF_ATTEN_ERROR_PX   = 60.0
 FF_MIN_GAIN         = 0.02
 
 PREDICTION_MAX_AGE_SEC = 0.10
@@ -122,9 +122,9 @@ PTU_STOP_COAST_FRAMES  = 5
 SPEED_VEL_MAX_CONTRIBUTION = 7000
 SPEED_ERR_STOPPED_MAX      = 4000
 SPEED_ERR_MAX_CONTRIBUTION = 5000
-DRONE_MAX_VEL_PX_S         = 350.0
-DRONE_STOP_VEL_THRESHOLD   = 8.0
-DRONE_SPEED_EMA_ALPHA      = 0.50
+DRONE_MAX_VEL_PX_S         = 750.0
+DRONE_STOP_VEL_THRESHOLD   = 4.0
+DRONE_SPEED_EMA_ALPHA      = 0.80
 
 STALE_REPEAT_WARN  = 3
 STALE_REPEAT_COAST = 10
@@ -142,7 +142,7 @@ SPEED_PER_CMD     = 80
 # Hold previous direction (decaying) for up to LOCKOUT_FRAMES.
 # Only allow the reversal if it persists for that many consecutive frames
 # OR if the raw error has clearly crossed (error confirms the reversal).
-LOCKOUT_FRAMES         = 40     # ~100ms at 30Hz
+LOCKOUT_FRAMES         = 20     # ~100ms at 30Hz
 LOCKOUT_ERROR_OVERRIDE = 40    # if |raw_err_x| > this in the NEW direction, skip lockout
 
 
@@ -426,14 +426,14 @@ def _ptu_control_loop() -> None:
             out_x = pid_pan.compute(smooth_err_x * deg_per_px,
                                     raw_err_x * deg_per_px, enable_int)
 
-            if abs(raw_err_x) < 150:
-                out_x *= 0.6
+            # if abs(raw_err_x) < 150:
+            #     out_x *= 0.6fv
 
             out_y = pid_tilt.compute(smooth_err_y * deg_per_px,
                                      raw_err_y * deg_per_px, enable_int)
 
-            if abs(raw_err_y) < 150:
-                out_y *= 0.5
+            # if abs(raw_err_y) < 150:
+            #     out_y *= 0.5
 
             # FF with raw-error attenuation (v9)
             ff_raw = 1.0 - min(raw_error_px / FF_ATTEN_ERROR_PX, 1.0)
